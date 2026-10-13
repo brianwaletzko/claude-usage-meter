@@ -1,0 +1,61 @@
+{
+  "name": "claude-usage-meter",
+  "productName": "Claude Usage Meter",
+  "version": "0.2.0",
+  "description": "Always-on-top Windows desktop widget that shows your Claude 5-hour and weekly plan usage.",
+  "author": "Brian Waletzko",
+  "license": "MIT",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "icons": "python3 scripts/make-icons.py",
+    "dist:win": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.16.1"
+  },
+  "build": {
+    "appId": "com.brianwaletzko.claudeusagemeter",
+    "productName": "Claude Usage Meter",
+    "files": [
+      "src/**",
+      "assets/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Claude Usage Meter",
+      "createStartMenuShortcut": true,
+      "artifactName": "Claude-Usage-Meter-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "Claude-Usage-Meter-Portable-${version}.exe"
+    }
+  },
+  "repository": "https://github.com/brianwaletzko/claude-usage-meter"
+}
