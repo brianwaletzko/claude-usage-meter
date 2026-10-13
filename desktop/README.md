@@ -11,11 +11,15 @@ A small always-on-top window, like a sticky note in the corner of your screen, t
 
 ## Requirements
 
-You need **Claude Code** installed and signed in with your Claude subscription. Run `claude` in a terminal once and sign in. The app reuses that sign-in from `%USERPROFILE%\.claude\.credentials.json`. It only reads that file and never changes it.
+Sign in one of two ways:
+- **claude.ai:** click **Sign in to claude.ai** in the widget and sign in in the window that opens. Use the email option if Google sign-in refuses. The sign-in stays in the app's own private browser profile and is only sent to claude.ai.
+- **Claude Code:** if Claude Code is installed and signed in (run `claude` once), the app reuses that sign-in from `%USERPROFILE%\.claude\.credentials.json`. It only reads that file and never changes it.
+
+By default it uses Claude Code first, then claude.ai. To choose, use **⋯ → Read usage with**.
 
 ## How it works
 
-Every 5 minutes (you can change this to 2, 10 or 15), the app asks `https://api.anthropic.com/api/oauth/usage` for your usage. This is the same internal endpoint the claude.ai usage page uses. Checking it does not count against your usage.
+Every 5 minutes (you can change this to 2, 10 or 15), the app asks Anthropic for your usage: `api.anthropic.com/api/oauth/usage` with a Claude Code sign-in, or claude.ai's own usage endpoint with a claude.ai sign-in. Checking it does not count against your usage.
 
 **This endpoint is undocumented.** Anthropic could change it at any time, and the app would show an error until it's updated.
 

@@ -9,6 +9,7 @@ const {
 
 const U = require('./usage')
 const { readCredentials, isExpired } = require('./credentials')
+const web = require('./claudeai')
 
 const APP_ID = 'com.brianwaletzko.claudeusagemeter'
 const USAGE_URL = process.env.CUM_USAGE_URL || U.USAGE_URL // override is for local testing only
@@ -26,6 +27,8 @@ const DEFAULTS = {
   pollMinutes: 5,
   alerts: true,
   autoRenew: false,
+  source: 'auto', // 'auto' | 'claude-code' | 'claude-ai'
+  webOrgId: null, // claude.ai organization whose usage is shown
   position: null, // { x, y } of the window, remembered between runs
   seen: {}, // alert bookkeeping, keyed by window
 }
@@ -60,6 +63,8 @@ const state = {
   updatedAt: null, // ms of last good reading
   checkedAt: null,
   renewing: false,
+  source: null, // 'code' | 'web': which sign-in the last check used
+  webSignedIn: false,
 }
 
 let win = null
@@ -68,7 +73,7 @@ let failures = 0
 let lastRenewAt = 0
 
 const ERROR_TEXT = {
-  'not-found': 'Claude Code sign-in not found. Install Claude Code and run "claude" once to sign in.',
+  'not-found': 'No sign-in found. Sign in to claude.ai here, or install Claude Code and run "claude" once.',
   'no-oauth': 'Claude Code is signed in with an API key, not a Claude subscription, so there are no plan limits to show.',
   unreadable: "Couldn't read Claude Code's sign-in file.",
   expired: 'Your Claude Code sign-in has expired. Use Claude Code once (or "Renew sign-in") to refresh it.',
@@ -77,6 +82,9 @@ const ERROR_TEXT = {
   network: "Couldn't reach Anthropic. Will retry.",
   http: 'Unexpected response from the usage service.',
   parse: 'The usage response looked different than expected.',
+  'web-signed-out': 'You are not signed in to claude.ai in this app. Sign in to see your usage.',
+  'web-blocked': "claude.ai's security check blocked the usage request. Try signing in again, or wait a bit.",
+  'web-no-org': "Couldn't find a Claude account for this claude.ai sign-in.",
 }
 
 function setError(kind, detail) {
@@ -91,57 +99,87 @@ async function poll() {
   state.checkedAt = Date.now()
   let kind = null
 
-  const creds = readCredentials()
-  if (!creds.ok) {
-    kind = creds.reason
-    setError(kind)
-  } else if (isExpired(creds)) {
-    kind = 'expired'
-    setError(kind)
-    if (config.autoRenew) renewSignIn({ quiet: true })
-  } else {
-    try {
-      const res = await net.fetch(USAGE_URL, {
-        headers: {
-          Authorization: `Bearer ${creds.token}`,
-          'anthropic-beta': U.BETA_HEADER,
-          'User-Agent': `claude-usage-meter/${app.getVersion()}`,
-          Accept: 'application/json',
-        },
-      })
-      if (res.status === 401 || res.status === 403) {
-        kind = 'auth'
-        setError(kind)
-        if (config.autoRenew) renewSignIn({ quiet: true })
-      } else if (res.status === 429) {
-        kind = 'ratelimit'
-        setError(kind)
-      } else if (!res.ok) {
-        kind = 'http'
-        setError(kind, `HTTP ${res.status}`)
-      } else {
-        const json = await res.json()
-        try {
-          state.usage = U.parseUsage(json)
-          state.status = 'ok'
-          state.error = null
-          state.updatedAt = Date.now()
-          runAlerts()
-        } catch (err) {
-          kind = 'parse'
-          setError(kind, err.message)
-        }
+  try {
+    const creds = readCredentials()
+    const expired = creds.ok && isExpired(creds)
+    state.webSignedIn = await web.isSignedIn().catch(() => false)
+    state.source = U.chooseSource(config.source, { ok: creds.ok, expired }, state.webSignedIn)
+    const r = state.source === 'web' ? await readWeb() : await readCode(creds, expired)
+    if (r.ok) {
+      try {
+        state.usage = U.parseUsage(r.json)
+        state.status = 'ok'
+        state.error = null
+        state.updatedAt = Date.now()
+        runAlerts()
+      } catch (err) {
+        kind = 'parse'
+        setError(kind, err.message)
       }
-    } catch (err) {
-      kind = 'network'
-      setError(kind, err.message)
+    } else {
+      kind = r.kind
+      setError(kind, r.detail)
     }
+  } catch (err) {
+    kind = 'network'
+    setError(kind, err.message)
   }
 
   failures = kind ? failures + 1 : 0
   const delay = U.nextDelay(config.pollMinutes * 60 * 1000, failures, kind)
   timer = setTimeout(poll, delay)
   render()
+}
+
+// Usage via Claude Code's saved sign-in. Returns { ok, json } or { ok: false, kind, detail }.
+async function readCode(creds, expired) {
+  if (!creds.ok) return { ok: false, kind: creds.reason }
+  if (expired) {
+    if (config.autoRenew) renewSignIn({ quiet: true })
+    return { ok: false, kind: 'expired' }
+  }
+  const res = await net.fetch(USAGE_URL, {
+    headers: {
+      Authorization: `Bearer ${creds.token}`,
+      'anthropic-beta': U.BETA_HEADER,
+      'User-Agent': `claude-usage-meter/${app.getVersion()}`,
+      Accept: 'application/json',
+    },
+  })
+  if (res.status === 401 || res.status === 403) {
+    if (config.autoRenew) renewSignIn({ quiet: true })
+    return { ok: false, kind: 'auth' }
+  }
+  if (res.status === 429) return { ok: false, kind: 'ratelimit' }
+  if (!res.ok) return { ok: false, kind: 'http', detail: `HTTP ${res.status}` }
+  return { ok: true, json: await res.json() }
+}
+
+// Usage via the claude.ai sign-in made inside the app.
+async function readWeb() {
+  const r = await web.fetchUsage(config.webOrgId)
+  if (r.ok && r.orgId !== config.webOrgId) {
+    config.webOrgId = r.orgId
+    saveConfig()
+  }
+  return r
+}
+
+function signInToClaudeAi() {
+  web.openSignIn(() => {
+    config.webOrgId = null
+    // Signing in on purpose means "use this", even if a Claude Code sign-in also exists.
+    if (config.source === 'claude-code') config.source = 'auto'
+    saveConfig()
+    poll()
+  })
+}
+
+async function signOutOfClaudeAi() {
+  await web.signOut().catch(() => {})
+  config.webOrgId = null
+  saveConfig()
+  poll()
 }
 
 function runAlerts() {
@@ -221,6 +259,17 @@ function buildMenu() {
         click: () => { setSetting('pollMinutes', m); poll() },
       })),
     },
+    {
+      label: 'Read usage with',
+      submenu: [
+        ['auto', 'Automatic (Claude Code first, then claude.ai)'],
+        ['claude-code', 'Claude Code sign-in'],
+        ['claude-ai', 'claude.ai sign-in'],
+      ].map(([value, label]) => ({
+        label, type: 'radio', checked: config.source === value,
+        click: () => { setSetting('source', value); poll() },
+      })),
+    },
     { label: 'Alert at 75% and 90%', type: 'checkbox', checked: config.alerts, click: i => setSetting('alerts', i.checked) },
     { label: 'Start with Windows', type: 'checkbox', checked: config.openAtLogin, click: i => { setSetting('openAtLogin', i.checked); applyLoginItem() } },
     { type: 'separator' },
@@ -230,6 +279,9 @@ function buildMenu() {
       click: () => renewSignIn(),
     },
     { label: 'Auto-renew when expired', type: 'checkbox', checked: config.autoRenew, click: i => setSetting('autoRenew', i.checked) },
+    state.webSignedIn
+      ? { label: 'Sign out of claude.ai', click: () => signOutOfClaudeAi() }
+      : { label: 'Sign in to claude.ai…', click: () => signInToClaudeAi() },
     { label: 'Open Claude usage page', click: () => shell.openExternal(USAGE_PAGE) },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
@@ -329,6 +381,8 @@ function serializable() {
     updatedAt: state.updatedAt,
     checkedAt: state.checkedAt,
     renewing: state.renewing,
+    source: state.source,
+    webSignedIn: state.webSignedIn,
     usage: u ? { fiveHour: w(u.fiveHour), weekly: w(u.weekly), extras: u.extras.map(e => ({ label: e.label, ...w(e) })) } : null,
   }
 }
@@ -352,6 +406,10 @@ function render() {
 
 // ---------- app ----------
 
+// Testing hook: a separate settings/sign-in folder, so a dev copy can run
+// beside the installed app (the single-instance lock is per folder).
+if (process.env.CUM_USER_DATA) app.setPath('userData', process.env.CUM_USER_DATA)
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
@@ -372,6 +430,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.on('refresh', () => poll())
     ipcMain.on('open-usage-page', () => shell.openExternal(USAGE_PAGE))
     ipcMain.on('renew', () => renewSignIn())
+    ipcMain.on('sign-in', () => signInToClaudeAi())
     ipcMain.on('menu', () => showMenu())
     ipcMain.on('minimize', () => win && win.minimize())
     ipcMain.on('quit', () => app.quit())

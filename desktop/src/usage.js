@@ -139,6 +139,34 @@ function checkAlert(seen, key, win, thresholds = ALERT_THRESHOLDS) {
   return { seen: next, fire: top }
 }
 
+/**
+ * Which sign-in to read usage with: 'code' (Claude Code's saved token) or
+ * 'web' (the claude.ai sign-in made inside the app).
+ * pref is 'auto' | 'claude-code' | 'claude-ai'. In auto, a working Claude Code
+ * sign-in wins; otherwise claude.ai is used if signed in; otherwise 'code', so
+ * its error (e.g. "sign-in not found") is what gets shown.
+ */
+function chooseSource(pref, code, webSignedIn) {
+  if (pref === 'claude-code') return 'code'
+  if (pref === 'claude-ai') return 'web'
+  if (code && code.ok && !code.expired) return 'code'
+  return webSignedIn ? 'web' : 'code'
+}
+
+/**
+ * Picks the organization whose usage to show from claude.ai's
+ * /api/organizations list: the preferred one (the account's last active org)
+ * if present, else the first that can chat, else the first. Returns its uuid.
+ */
+function pickOrg(orgs, preferredId) {
+  if (!Array.isArray(orgs)) return null
+  const valid = orgs.filter(o => o && typeof o.uuid === 'string' && o.uuid)
+  const preferred = preferredId && valid.find(o => o.uuid === preferredId)
+  if (preferred) return preferred.uuid
+  const chat = valid.find(o => Array.isArray(o.capabilities) && o.capabilities.includes('chat'))
+  return (chat || valid[0] || {}).uuid || null
+}
+
 /** Milliseconds to wait before the next poll, with backoff on errors. */
 function nextDelay(baseMs, failures, kind) {
   if (kind === 'ratelimit') return Math.max(baseMs, 10 * 60 * 1000)
@@ -157,4 +185,6 @@ module.exports = {
   tooltip,
   checkAlert,
   nextDelay,
+  chooseSource,
+  pickOrg,
 }

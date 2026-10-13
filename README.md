@@ -19,6 +19,7 @@ Use either one, or both.
 
 ### Features
 
+- Works with **Claude Code** or just a **claude.ai account**. If you don't use Claude Code, sign in to claude.ai right inside the app.
 - Shows your **5-hour window** and **weekly limit** as bars, with the exact percentage and reset time ("Resets 4:18 PM · in 2h 14m"). Any model-specific weekly limits appear too.
 - Colors change as you get closer: **green** below 75%, **amber** from 75%, **red** from 90%.
 - **Stays on top** of other windows. Drag it anywhere, and it opens in the same spot next time.
@@ -40,17 +41,12 @@ To uninstall, go to **Settings → Apps → Installed apps → Claude Usage Mete
 ### Requirements
 
 - Windows 10 or 11 (64-bit)
-- A paid Claude subscription with usage limits (for example Pro or Max)
-- **Claude Code** installed and signed in with that subscription. The widget reuses Claude Code's sign-in, so you never enter a password into it.
+- A Claude account with usage limits. Pro and Max have been tested.
+- One of these two ways to sign in:
+  - **claude.ai (no extra software needed).** On first launch, click **Sign in to claude.ai** and sign in in the window that opens. The app remembers it.
+  - **Claude Code.** If Claude Code is installed and signed in, the widget reuses that sign-in automatically, so there's nothing to enter.
 
-If you don't have Claude Code yet, open PowerShell and run:
-
-```powershell
-irm https://claude.ai/install.ps1 | iex
-claude
-```
-
-Then sign in when prompted. You only need to do this once.
+If both are available, the widget uses Claude Code first. To choose, use **⋯ → Read usage with**.
 
 ### Using it
 
@@ -62,15 +58,24 @@ Then sign in when prompted. You only need to do this once.
 | Hide it for a while | Click **–** (minimize) |
 | Close it | Click **✕**, then reopen from the desktop or Start menu |
 
-Settings include Always on top, Check every, Alert at 75% and 90%, Start with Windows, Auto-renew sign-in, and Move to bottom-right corner.
+Settings include Read usage with (Claude Code or claude.ai), Sign in to / Sign out of claude.ai, Always on top, Check every, Alert at 75% and 90%, Start with Windows, Auto-renew sign-in, and Move to bottom-right corner.
 
 ### Troubleshooting
 
-**"Claude Code sign-in not found"**
-The widget couldn't find `%USERPROFILE%\.claude\.credentials.json`. Run `claude` in a terminal and sign in. (The Claude desktop app and some editor extensions don't create this file. The command-line `claude` does.)
+**"No sign-in found"**
+Click **Sign in to claude.ai** and sign in. Or, if you use Claude Code, run `claude` in a terminal and sign in. The widget looks for `%USERPROFILE%\.claude\.credentials.json`, which the command-line `claude` creates. The Claude desktop app and some editor extensions don't create it.
+
+**Google sign-in doesn't work in the sign-in window**
+Google sometimes refuses to sign in inside apps. Use **Continue with email** instead. claude.ai emails you a code or link to finish signing in.
+
+**"Not signed in to claude.ai in this app"**
+Your claude.ai sign-in ended (for example, you signed out everywhere). Click **Sign in to claude.ai** again.
+
+**"claude.ai's security check blocked the usage request"**
+claude.ai occasionally asks browsers to prove they're human. Sign in again from the menu, or wait a few minutes.
 
 **"Your Claude Code sign-in has expired"**
-Claude Code refreshes its sign-in whenever you use it. If you mostly use claude.ai instead, the saved sign-in can expire. Click **Renew sign-in**. That runs a one-word Claude Code prompt on the smallest model, which refreshes the sign-in and uses a tiny amount of your plan. To do this automatically, turn on **Auto-renew when expired** in the menu. It runs at most once every 10 minutes.
+Claude Code refreshes its sign-in whenever you use it. If you mostly use claude.ai instead, the saved sign-in can expire. If you're also signed in to claude.ai in the app, the widget switches to that automatically. Otherwise click **Renew sign-in**. That runs a one-word Claude Code prompt on the smallest model, which refreshes the sign-in and uses a tiny amount of your plan. To do this automatically, turn on **Auto-renew when expired** in the menu. It runs at most once every 10 minutes.
 
 **"Signed in with an API key"**
 Claude Code is using an Anthropic API key, not a Claude subscription. API keys don't have plan limits, so there's nothing to show.
@@ -106,11 +111,12 @@ Both tools read the same usage numbers that claude.ai's **Settings → Usage** p
 
 The desktop widget:
 
-- **Reads** the sign-in token that Claude Code saves on your computer. It **never changes, refreshes, or copies** that file, so it can't sign you out of Claude Code.
-- Sends that token **only to `api.anthropic.com`**, to fetch your usage. It doesn't talk to any other server, and it has no analytics or tracking.
+- **With Claude Code:** it reads the sign-in token that Claude Code saves on your computer. It **never changes, refreshes, or copies** that file, so it can't sign you out of Claude Code. It sends that token **only to `api.anthropic.com`**.
+- **With claude.ai:** you sign in on claude.ai's real sign-in page, inside the app, and the app never sees your password. The sign-in is kept in the app's own private browser profile, separate from your normal browser, and is sent **only to `claude.ai`**. **Sign out of claude.ai** in the menu deletes it.
+- It doesn't talk to any other server, and it has no analytics or tracking.
 - Stores its settings (window position, refresh interval, alert history) in `%APPDATA%\Claude Usage Meter\config.json`.
 
-The usage endpoint (`/api/oauth/usage`) is **undocumented**. Other community usage meters use it too, but Anthropic hasn't published it and could change or remove it without notice.
+The usage endpoints (`api.anthropic.com/api/oauth/usage` and claude.ai's `/api/organizations/…/usage`) are **undocumented**. Other community usage meters use it too, but Anthropic hasn't published it and could change or remove it without notice.
 
 ---
 

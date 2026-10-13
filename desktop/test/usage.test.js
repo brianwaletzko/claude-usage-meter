@@ -121,3 +121,28 @@ test('env token and CLAUDE_CONFIG_DIR are honored', () => {
   assert.equal(readCredentials({ CLAUDE_CODE_OAUTH_TOKEN: ' abc ' }, '/nowhere').token, 'abc')
   assert.equal(credentialPaths({ CLAUDE_CONFIG_DIR: '/cfg' }, '/home/x')[0], path.join('/cfg', '.credentials.json'))
 })
+
+test('chooses Claude Code when it works, claude.ai otherwise', () => {
+  const good = { ok: true, expired: false }
+  const expired = { ok: true, expired: true }
+  const missing = { ok: false }
+  assert.equal(U.chooseSource('auto', good, true), 'code')
+  assert.equal(U.chooseSource('auto', expired, true), 'web')
+  assert.equal(U.chooseSource('auto', missing, true), 'web')
+  assert.equal(U.chooseSource('auto', missing, false), 'code') // shows the Claude Code error
+  assert.equal(U.chooseSource('claude-ai', good, false), 'web')
+  assert.equal(U.chooseSource('claude-code', missing, true), 'code')
+})
+
+test('picks the preferred organization, then one that can chat', () => {
+  const orgs = [
+    { uuid: 'api-org', capabilities: ['api'] },
+    { uuid: 'chat-org', capabilities: ['chat', 'claude_pro'] },
+  ]
+  assert.equal(U.pickOrg(orgs, 'api-org'), 'api-org')
+  assert.equal(U.pickOrg(orgs, 'gone'), 'chat-org')
+  assert.equal(U.pickOrg(orgs, null), 'chat-org')
+  assert.equal(U.pickOrg([{ uuid: 'only' }], null), 'only')
+  assert.equal(U.pickOrg([], null), null)
+  assert.equal(U.pickOrg({ error: 'nope' }, null), null)
+})

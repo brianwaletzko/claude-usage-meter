@@ -1,7 +1,7 @@
 {
   "name": "claude-usage-meter",
   "productName": "Claude Usage Meter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Always-on-top Windows desktop widget that shows your Claude 5-hour and weekly plan usage.",
   "author": "Brian Waletzko",
   "license": "MIT",

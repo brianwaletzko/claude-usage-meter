@@ -80,7 +80,8 @@
     background: var(--banner-bg); color: var(--banner-fg); border-radius: 6px;
     padding: 8px 10px; margin-bottom: 12px; font-size: 12px;
   }
-  .banner button { margin-top: 6px; }
+  .banner-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .banner-actions button { margin-top: 6px; }
   footer {
     border-top: 1px solid var(--line); padding: 8px 16px; display: flex;
     justify-content: space-between; align-items: center;
@@ -103,7 +104,10 @@
 
     <div class="banner" id="banner" hidden>
       <div id="banner-text"></div>
-      <button id="renew" hidden>Renew sign-in</button>
+      <div class="banner-actions">
+        <button id="sign-in" hidden>Sign in to claude.ai</button>
+        <button id="renew" hidden>Renew sign-in</button>
+      </div>
     </div>
 
     <div id="rows"><div class="empty">Checking your usage…</div></div>

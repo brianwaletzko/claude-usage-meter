@@ -2,6 +2,10 @@
 
 let last = null
 
+// Errors where signing in to claude.ai inside the app is a way forward.
+const SIGN_IN_ERRORS = ['not-found', 'no-oauth', 'unreadable', 'expired', 'auth', 'web-signed-out', 'web-blocked', 'web-no-org']
+const SOURCE_NAME = { code: 'Claude Code sign-in', web: 'claude.ai sign-in' }
+
 const $ = id => document.getElementById(id)
 
 function level(p) {
@@ -73,13 +77,15 @@ function draw() {
   }
 
   $('updated').textContent = s.updatedAt ? ago(s.updatedAt, now) : ''
+  $('updated').title = SOURCE_NAME[s.source] ? `Using your ${SOURCE_NAME[s.source]}` : ''
 
   const showBanner = s.status === 'error' && s.error
   $('banner').hidden = !showBanner
   if (showBanner) {
     $('banner-text').textContent = s.usage ? `${s.error.message} Showing the last reading.` : s.error.message
-    const canRenew = ['expired', 'auth'].includes(s.error.kind)
+    const canRenew = s.source === 'code' && ['expired', 'auth'].includes(s.error.kind)
     $('renew').hidden = !canRenew
+    $('sign-in').hidden = !SIGN_IN_ERRORS.includes(s.error.kind)
     $('renew').disabled = Boolean(s.renewing)
     $('renew').textContent = s.renewing ? 'Renewing…' : 'Renew sign-in'
   }
@@ -95,6 +101,7 @@ window.meter.onState(s => {
 $('refresh').addEventListener('click', () => window.meter.refresh())
 $('open').addEventListener('click', () => window.meter.openUsagePage())
 $('renew').addEventListener('click', () => window.meter.renew())
+$('sign-in').addEventListener('click', () => window.meter.signIn())
 $('menu').addEventListener('click', () => window.meter.menu())
 $('minimize').addEventListener('click', () => window.meter.minimize())
 $('close').addEventListener('click', () => window.meter.quit())

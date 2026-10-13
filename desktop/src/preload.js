@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('meter', {
   refresh: () => ipcRenderer.send('refresh'),
   openUsagePage: () => ipcRenderer.send('open-usage-page'),
   renew: () => ipcRenderer.send('renew'),
+  signIn: () => ipcRenderer.send('sign-in'),
   menu: () => ipcRenderer.send('menu'),
   minimize: () => ipcRenderer.send('minimize'),
   quit: () => ipcRenderer.send('quit'),
