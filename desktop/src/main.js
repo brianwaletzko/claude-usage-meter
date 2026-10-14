@@ -26,6 +26,7 @@ const DEFAULTS = {
   alwaysOnTop: true,
   pollMinutes: 5,
   alerts: true,
+  showPace: true, // time-elapsed bar + projection under each window
   autoRenew: false,
   source: 'auto', // 'auto' | 'claude-code' | 'claude-ai'
   webOrgId: null, // claude.ai organization whose usage is shown
@@ -270,6 +271,7 @@ function buildMenu() {
         click: () => { setSetting('source', value); poll() },
       })),
     },
+    { label: 'Show time elapsed', type: 'checkbox', checked: config.showPace, click: i => setSetting('showPace', i.checked) },
     { label: 'Alert at 75% and 90%', type: 'checkbox', checked: config.alerts, click: i => setSetting('alerts', i.checked) },
     { label: 'Start with Windows', type: 'checkbox', checked: config.openAtLogin, click: i => { setSetting('openAtLogin', i.checked); applyLoginItem() } },
     { type: 'separator' },
@@ -374,7 +376,17 @@ function onScreen(b) {
 
 function serializable() {
   const u = state.usage
-  const w = v => (v ? { percent: v.percent, resetsAt: v.resetsAt ? v.resetsAt.toISOString() : null } : null)
+  const now = new Date()
+  const iso = d => (d ? d.toISOString() : null)
+  const w = (v, windowMs) => {
+    if (!v) return null
+    const p = windowMs ? U.pace(v, windowMs, now) : null
+    return {
+      percent: v.percent,
+      resetsAt: iso(v.resetsAt),
+      pace: p ? { elapsed: p.elapsed, projected: p.projected, runsOutAt: iso(p.runsOutAt) } : null,
+    }
+  }
   return {
     status: state.status,
     error: state.error,
@@ -383,7 +395,12 @@ function serializable() {
     renewing: state.renewing,
     source: state.source,
     webSignedIn: state.webSignedIn,
-    usage: u ? { fiveHour: w(u.fiveHour), weekly: w(u.weekly), extras: u.extras.map(e => ({ label: e.label, ...w(e) })) } : null,
+    showPace: Boolean(config.showPace),
+    usage: u ? {
+      fiveHour: w(u.fiveHour, U.WINDOW_MS.fiveHour),
+      weekly: w(u.weekly, U.WINDOW_MS.weekly),
+      extras: u.extras.map(e => ({ label: e.label, ...w(e) })), // same clock as weekly, so no pace of their own
+    } : null,
   }
 }
 
@@ -448,6 +465,8 @@ if (!app.requestSingleInstanceLock()) {
 
     render()
     poll()
+    // Re-send so the time-elapsed bars keep moving between usage checks.
+    setInterval(sendState, 30_000)
 
     // Testing hook: save a screenshot of the window, then quit.
     if (process.env.CUM_SCREENSHOT) {

@@ -167,6 +167,31 @@ function pickOrg(orgs, preferredId) {
   return (chat || valid[0] || {}).uuid || null
 }
 
+const WINDOW_MS = { fiveHour: 5 * 3600 * 1000, weekly: 7 * 24 * 3600 * 1000 }
+const MIN_ELAPSED_TO_PROJECT = 0.1 // projections from the first few minutes are noise
+
+/**
+ * How far through its window a usage window is, and where usage is heading.
+ * Returns null when it can't tell (no reset time yet, or odd data), else
+ *   { elapsed: 0–100 (% of the window gone),
+ *     projected: % used by reset at the current rate, or null if too early,
+ *     runsOutAt: Date the limit would be hit at the current rate, if before reset }
+ */
+function pace(win, windowMs, now = new Date()) {
+  if (!win || !win.resetsAt || !windowMs) return null
+  const left = win.resetsAt.getTime() - now.getTime()
+  if (left <= 0 || left > windowMs) return null
+  const fraction = (windowMs - left) / windowMs
+  const out = { elapsed: Math.round(fraction * 1000) / 10, projected: null, runsOutAt: null }
+  if (fraction < MIN_ELAPSED_TO_PROJECT) return out
+  out.projected = Math.round(win.percent / fraction)
+  if (win.percent > 0 && win.percent < 100 && out.projected >= 100) {
+    const start = win.resetsAt.getTime() - windowMs
+    out.runsOutAt = new Date(start + (now.getTime() - start) * (100 / win.percent))
+  }
+  return out
+}
+
 /** Milliseconds to wait before the next poll, with backoff on errors. */
 function nextDelay(baseMs, failures, kind) {
   if (kind === 'ratelimit') return Math.max(baseMs, 10 * 60 * 1000)
@@ -187,4 +212,6 @@ module.exports = {
   nextDelay,
   chooseSource,
   pickOrg,
+  WINDOW_MS,
+  pace,
 }

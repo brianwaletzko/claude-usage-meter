@@ -42,7 +42,26 @@ function ago(ms, now) {
   return `Updated ${Math.floor(mins / 60)}h ago`
 }
 
-function row(label, win, extra, now) {
+// "43% of week gone · on pace for ~74%" or "… · out by Wed 3:10 PM".
+function paceLine(win, unit, now) {
+  const p = win.pace
+  const el = document.createElement('div')
+  el.className = 'pace'
+  let text = `${Math.round(p.elapsed)}% of ${unit} gone`
+  if (win.percent < 100 && p.runsOutAt) {
+    const when = clock(new Date(p.runsOutAt), now)
+    text += ` · out by ${when}`
+    el.classList.add('pace-over')
+    el.title = `At your current rate you'd hit the limit around ${when}, before it resets.`
+  } else if (win.percent < 100 && p.projected !== null) {
+    text += ` · on pace for ~${p.projected}%`
+    el.title = `At your current rate you'd use about ${p.projected}% by the time it resets.`
+  }
+  el.textContent = text
+  return el
+}
+
+function row(label, win, extra, now, unit) {
   const el = document.createElement('div')
   const pct = Math.round(win.percent)
   el.className = `row ${level(win.percent)}${extra ? ' extra' : ''}`
@@ -55,6 +74,16 @@ function row(label, win, extra, now) {
   el.querySelector('.label').textContent = label
   el.querySelector('.bar').setAttribute('aria-label', `${label} ${pct}% used`)
   el.querySelector('.sub').textContent = sub
+  if (unit && win.pace && last.showPace) {
+    const time = document.createElement('div')
+    time.className = 'bar time'
+    time.setAttribute('role', 'progressbar')
+    time.setAttribute('aria-label', `${Math.round(win.pace.elapsed)}% of the ${unit} has passed`)
+    time.title = 'Time elapsed in this window'
+    time.innerHTML = '<div class="fill"></div>'
+    time.firstChild.style.width = `${Math.min(100, win.pace.elapsed)}%`
+    el.querySelector('.bar').after(time, paceLine(win, unit, now))
+  }
   return el
 }
 
@@ -66,8 +95,8 @@ function draw() {
   rows.replaceChildren()
 
   if (s.usage) {
-    if (s.usage.fiveHour) rows.append(row('5-hour window', s.usage.fiveHour, false, now))
-    if (s.usage.weekly) rows.append(row('Weekly limit', s.usage.weekly, false, now))
+    if (s.usage.fiveHour) rows.append(row('5-hour window', s.usage.fiveHour, false, now, 'window'))
+    if (s.usage.weekly) rows.append(row('Weekly limit', s.usage.weekly, false, now, 'week'))
     for (const e of s.usage.extras || []) rows.append(row(e.label, e, true, now))
   } else {
     const d = document.createElement('div')

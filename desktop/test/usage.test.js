@@ -146,3 +146,39 @@ test('picks the preferred organization, then one that can chat', () => {
   assert.equal(U.pickOrg([], null), null)
   assert.equal(U.pickOrg({ error: 'nope' }, null), null)
 })
+
+test('pace: time elapsed and projection through the week', () => {
+  const week = U.WINDOW_MS.weekly
+  const now = new Date('2026-10-12T12:00:00Z')
+  const resetsIn = ms => new Date(now.getTime() + ms)
+
+  // Halfway through the week, 30% used: on pace for ~60%.
+  let p = U.pace({ percent: 30, resetsAt: resetsIn(week / 2) }, week, now)
+  assert.equal(p.elapsed, 50)
+  assert.equal(p.projected, 60)
+  assert.equal(p.runsOutAt, null)
+
+  // Quarter of the way through, 50% used: runs out at the halfway point.
+  p = U.pace({ percent: 50, resetsAt: resetsIn(week * 0.75) }, week, now)
+  assert.equal(p.elapsed, 25)
+  assert.equal(p.projected, 200)
+  assert.equal(p.runsOutAt.toISOString(), resetsIn(week * 0.25).toISOString())
+
+  // Too early to project, but elapsed is still reported.
+  p = U.pace({ percent: 4, resetsAt: resetsIn(week * 0.99) }, week, now)
+  assert.equal(p.elapsed, 1)
+  assert.equal(p.projected, null)
+
+  // Already at the limit: no "runs out" time.
+  p = U.pace({ percent: 100, resetsAt: resetsIn(week / 2) }, week, now)
+  assert.equal(p.runsOutAt, null)
+})
+
+test('pace: gives up on missing or inconsistent reset times', () => {
+  const h5 = U.WINDOW_MS.fiveHour
+  const now = new Date('2026-10-12T12:00:00Z')
+  assert.equal(U.pace({ percent: 10, resetsAt: null }, h5, now), null)
+  assert.equal(U.pace({ percent: 10, resetsAt: new Date(now.getTime() - 1000) }, h5, now), null)
+  assert.equal(U.pace({ percent: 10, resetsAt: new Date(now.getTime() + 6 * 3600e3) }, h5, now), null)
+  assert.equal(U.pace(null, h5, now), null)
+})

@@ -21,6 +21,7 @@ Use either one, or both.
 
 - Works with **Claude Code** or just a **claude.ai account**. If you don't use Claude Code, sign in to claude.ai right inside the app.
 - Shows your **5-hour window** and **weekly limit** as bars, with the exact percentage and reset time ("Resets 4:18 PM · in 2h 14m"). Any model-specific weekly limits appear too.
+- **Pace check:** a thinner bar under each one shows how much of the window has passed, so you can see whether you're using it faster than time is passing. A line underneath says where you're heading, like "66% of week gone · on pace for ~49%". If you'd run out before the reset, it warns you in amber, like "out by Tue 12:14 AM". Turn it off with **⋯ → Show time elapsed**.
 - Colors change as you get closer: **green** below 75%, **amber** from 75%, **red** from 90%.
 - **Stays on top** of other windows. Drag it anywhere, and it opens in the same spot next time.
 - The **taskbar button shows the numbers** too (e.g. "Claude 42% · 18%"), even when it's minimized.
@@ -58,7 +59,7 @@ If both are available, the widget uses Claude Code first. To choose, use **⋯ �
 | Hide it for a while | Click **–** (minimize) |
 | Close it | Click **✕**, then reopen from the desktop or Start menu |
 
-Settings include Read usage with (Claude Code or claude.ai), Sign in to / Sign out of claude.ai, Always on top, Check every, Alert at 75% and 90%, Start with Windows, Auto-renew sign-in, and Move to bottom-right corner.
+Settings include Read usage with (Claude Code or claude.ai), Sign in to / Sign out of claude.ai, Show time elapsed, Always on top, Check every, Alert at 75% and 90%, Start with Windows, Auto-renew sign-in, and Move to bottom-right corner.
 
 ### Troubleshooting
 

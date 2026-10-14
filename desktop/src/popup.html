@@ -18,6 +18,7 @@
     --banner-fg: #6b4300;
     --btn: #f1f1f4;
     --btn-hover: #e6e6eb;
+    --time: #8b90a8;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -33,6 +34,7 @@
       --banner-fg: #f6d79a;
       --btn: #2d2d33;
       --btn-hover: #38383f;
+      --time: #7d8299;
     }
   }
   * { box-sizing: border-box; }
@@ -74,6 +76,11 @@
   .warn .pct { color: var(--warn); }
   .high .pct { color: var(--high); }
   .sub { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  /* Time-elapsed bar: thinner and neutral, to compare against the usage bar above it. */
+  .bar.time { height: 4px; margin: -2px 0 4px; }
+  .bar.time .fill, .warn .bar.time .fill, .high .bar.time .fill { background: var(--time); }
+  .pace { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .pace-over { color: var(--warn); font-weight: 600; }
   .extra .pct { font-size: 15px; }
   .extra .bar { height: 5px; }
   .banner {
