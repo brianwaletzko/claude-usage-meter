@@ -10,14 +10,18 @@ const {
 const U = require('./usage')
 const { readCredentials, isExpired } = require('./credentials')
 const web = require('./claudeai')
+const { createLogger } = require('./log')
 
 const APP_ID = 'com.brianwaletzko.claudeusagemeter'
 const USAGE_URL = process.env.CUM_USAGE_URL || U.USAGE_URL // override is for local testing only
 const USAGE_PAGE = 'https://claude.ai/settings/usage'
 const ASSETS = path.join(__dirname, '..', 'assets')
 const RENEW_COOLDOWN_MS = 10 * 60 * 1000
-const WIDTH = 320
+const MIN_WIDTH = 280 // the user can drag the left/right edge between these;
+const MAX_WIDTH = 640 // height always fits the content
 const MARGIN = 12
+
+let log = createLogger(path.join(require('os').tmpdir(), 'claude-usage-meter.log')) // replaced once app paths are ready
 
 // ---------- settings ----------
 
@@ -31,6 +35,7 @@ const DEFAULTS = {
   source: 'auto', // 'auto' | 'claude-code' | 'claude-ai'
   webOrgId: null, // claude.ai organization whose usage is shown
   position: null, // { x, y } of the window, remembered between runs
+  width: 320, // window width; the user can resize it
   seen: {}, // alert bookkeeping, keyed by window
 }
 
@@ -95,7 +100,9 @@ function setError(kind, detail) {
 
 // ---------- polling ----------
 
-async function poll() {
+// manual: the user asked for this check (refresh, changed a setting, signed in),
+// so they're looking at the widget and don't need a pop-up notification too.
+async function poll({ manual = false } = {}) {
   clearTimeout(timer)
   state.checkedAt = Date.now()
   let kind = null
@@ -112,7 +119,8 @@ async function poll() {
         state.status = 'ok'
         state.error = null
         state.updatedAt = Date.now()
-        runAlerts()
+        log.info(`Usage via ${sourceName()}: ${summary(state.usage)}`)
+        runAlerts({ quiet: manual || Boolean(win && !win.isDestroyed() && win.isFocused()) })
       } catch (err) {
         kind = 'parse'
         setError(kind, err.message)
@@ -126,10 +134,20 @@ async function poll() {
     setError(kind, err.message)
   }
 
+  if (kind) log.warn(`Usage check via ${sourceName()} failed: ${kind}${state.error && state.error.detail ? ` (${state.error.detail})` : ''}`)
   failures = kind ? failures + 1 : 0
   const delay = U.nextDelay(config.pollMinutes * 60 * 1000, failures, kind)
   timer = setTimeout(poll, delay)
   render()
+}
+
+function sourceName() {
+  return state.source === 'web' ? 'claude.ai' : 'Claude Code'
+}
+
+function summary(u) {
+  const pct = w => (w ? `${Math.round(w.percent)}%` : 'n/a')
+  return `5-hour ${pct(u.fiveHour)}, weekly ${pct(u.weekly)}`
 }
 
 // Usage via Claude Code's saved sign-in. Returns { ok, json } or { ok: false, kind, detail }.
@@ -167,23 +185,28 @@ async function readWeb() {
 }
 
 function signInToClaudeAi() {
+  log.info('Opening claude.ai sign-in window')
   web.openSignIn(() => {
+    log.info('Signed in to claude.ai')
     config.webOrgId = null
     // Signing in on purpose means "use this", even if a Claude Code sign-in also exists.
     if (config.source === 'claude-code') config.source = 'auto'
     saveConfig()
-    poll()
+    poll({ manual: true })
   })
 }
 
 async function signOutOfClaudeAi() {
-  await web.signOut().catch(() => {})
+  await web.signOut().catch(err => log.warn(`Sign-out cleanup failed: ${err.message}`))
+  log.info('Signed out of claude.ai')
   config.webOrgId = null
   saveConfig()
-  poll()
+  poll({ manual: true })
 }
 
-function runAlerts() {
+// Records each threshold crossed so it's only ever announced once per window.
+// quiet: the user is already looking at the widget, so record it without a pop-up.
+function runAlerts({ quiet = false } = {}) {
   if (!state.usage) return
   const windows = [
     ['fiveHour', '5-hour window', state.usage.fiveHour],
@@ -193,7 +216,10 @@ function runAlerts() {
   for (const [key, label, w] of windows) {
     const r = U.checkAlert(seen, key, w)
     seen = r.seen
-    if (r.fire !== null && config.alerts && Notification.isSupported()) {
+    if (r.fire === null) continue
+    const show = config.alerts && !quiet && Notification.isSupported()
+    log.info(`${label} crossed ${r.fire}% (${show ? 'notification shown' : quiet ? 'no pop-up: widget in use' : 'no pop-up: alerts off'})`)
+    if (show) {
       const when = w.resetsAt ? ` It resets ${U.formatClock(w.resetsAt)} (${U.formatRelative(w.resetsAt)}).` : ''
       new Notification({
         title: `Claude: ${label} at ${Math.round(w.percent)}%`,
@@ -215,6 +241,7 @@ function renewSignIn({ quiet = false } = {}) {
   if (state.renewing) return
   if (quiet && Date.now() - lastRenewAt < RENEW_COOLDOWN_MS) return
   lastRenewAt = Date.now()
+  log.info(`Renewing Claude Code sign-in (${quiet ? 'automatic' : 'requested'})`)
   state.renewing = true
   render()
   let child
@@ -231,12 +258,14 @@ function renewSignIn({ quiet = false } = {}) {
     render()
     return
   }
-  child.on('error', () => {
+  child.on('error', err => {
+    log.warn(`Could not run Claude Code to renew: ${err.message}`)
     if (!quiet) notify('Could not run Claude Code', 'Make sure the "claude" command works in a terminal.')
   })
-  child.on('exit', () => {
+  child.on('exit', code => {
+    log.info(`Claude Code renew finished (exit code ${code})`)
     state.renewing = false
-    poll()
+    poll({ manual: !quiet })
   })
 }
 
@@ -249,7 +278,7 @@ function notify(title, body) {
 function buildMenu() {
   const needsRenew = state.status === 'error' && ['expired', 'auth'].includes(state.error.kind)
   return Menu.buildFromTemplate([
-    { label: 'Refresh now', click: () => poll() },
+    { label: 'Refresh now', click: () => poll({ manual: true }) },
     { type: 'separator' },
     { label: 'Always on top', type: 'checkbox', checked: config.alwaysOnTop, click: i => { setSetting('alwaysOnTop', i.checked); applyAlwaysOnTop() } },
     { label: 'Move to bottom-right corner', click: () => { config.position = null; saveConfig(); placeWindow() } },
@@ -257,7 +286,7 @@ function buildMenu() {
       label: 'Check every',
       submenu: [2, 5, 10, 15].map(m => ({
         label: `${m} minutes`, type: 'radio', checked: config.pollMinutes === m,
-        click: () => { setSetting('pollMinutes', m); poll() },
+        click: () => { setSetting('pollMinutes', m); poll({ manual: true }) },
       })),
     },
     {
@@ -268,7 +297,7 @@ function buildMenu() {
         ['claude-ai', 'claude.ai sign-in'],
       ].map(([value, label]) => ({
         label, type: 'radio', checked: config.source === value,
-        click: () => { setSetting('source', value); poll() },
+        click: () => { setSetting('source', value); poll({ manual: true }) },
       })),
     },
     { label: 'Show time elapsed', type: 'checkbox', checked: config.showPace, click: i => setSetting('showPace', i.checked) },
@@ -285,6 +314,7 @@ function buildMenu() {
       ? { label: 'Sign out of claude.ai', click: () => signOutOfClaudeAi() }
       : { label: 'Sign in to claude.ai…', click: () => signInToClaudeAi() },
     { label: 'Open Claude usage page', click: () => shell.openExternal(USAGE_PAGE) },
+    { label: 'Open log file', click: () => shell.openPath(log.file) },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ])
@@ -314,11 +344,13 @@ function applyAlwaysOnTop() {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: WIDTH,
+    width: clampWidth(config.width),
     height: 240,
     show: false,
     frame: false,
-    resizable: false,
+    resizable: true, // for the width; fitHeight() keeps the height fitted to the content
+    minWidth: MIN_WIDTH,
+    maxWidth: MAX_WIDTH,
     maximizable: false,
     fullscreenable: false,
     alwaysOnTop: Boolean(config.alwaysOnTop),
@@ -344,6 +376,15 @@ function createWindow() {
     saveConfig()
   })
 
+  // Remember the width the user drags it to.
+  win.on('resized', () => {
+    const [w] = win.getSize()
+    if (Math.abs(w - config.width) > 2) {
+      config.width = w
+      saveConfig()
+    }
+  })
+
   // Right-clicking the drag area would show Windows' own window menu; show ours instead.
   win.on('system-context-menu', e => {
     e.preventDefault()
@@ -363,6 +404,33 @@ function placeWindow() {
   const x = saved ? saved.x : wa.x + wa.width - w - MARGIN
   const y = saved ? saved.y : wa.y + wa.height - h - MARGIN
   win.setBounds(onScreen({ x, y, width: w, height: h }))
+}
+
+function clampWidth(w) {
+  return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(Number(w) || 320)))
+}
+
+// Makes the window exactly as tall as its content: taller when a message
+// appears, shorter again when it goes away. The user can drag the width;
+// a dragged height just springs back to fit the content.
+// When the window sits in the bottom half of the screen it grows/shrinks
+// upward, so it stays in its corner.
+function fitHeight(contentHeight) {
+  if (!win || win.isDestroyed()) return
+  const h = Math.max(100, Math.min(900, Math.ceil(Number(contentHeight) || 0)))
+  const { x, y, height: oldH } = win.getBounds()
+  // At 125%/150% display scaling Windows can round sizes by a pixel; chasing
+  // that pixel would re-fit forever.
+  if (Math.abs(h - oldH) <= 1) return
+  const width = clampWidth(config.width)
+  const wa = screen.getDisplayMatching(win.getBounds()).workArea
+  const bottomHalf = y + oldH / 2 > wa.y + wa.height / 2
+  // A resizable window grows a pixel or two on every programmatic resize at
+  // those scalings (the width crept wider and wider), so switch resizing off
+  // while setting the size.
+  win.setResizable(false)
+  win.setBounds(onScreen({ x, y: bottomHalf ? y + oldH - h : y, width, height: h }))
+  win.setResizable(true)
 }
 
 function onScreen(b) {
@@ -440,28 +508,21 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     if (process.platform === 'win32') app.setAppUserModelId(APP_ID)
+    log = createLogger(path.join(app.getPath('userData'), 'meter.log'))
+    log.info(`Started v${app.getVersion()} (${process.platform} ${require('os').release()}, Electron ${process.versions.electron})`)
+    process.on('unhandledRejection', err => log.error(`Unhandled: ${err && err.stack ? err.stack : err}`))
     loadConfig()
     applyLoginItem()
     createWindow()
 
-    ipcMain.on('refresh', () => poll())
+    ipcMain.on('refresh', () => poll({ manual: true }))
     ipcMain.on('open-usage-page', () => shell.openExternal(USAGE_PAGE))
     ipcMain.on('renew', () => renewSignIn())
     ipcMain.on('sign-in', () => signInToClaudeAi())
     ipcMain.on('menu', () => showMenu())
     ipcMain.on('minimize', () => win && win.minimize())
     ipcMain.on('quit', () => app.quit())
-    ipcMain.on('resize', (_e, height) => {
-      if (!win) return
-      const h = Math.max(120, Math.min(600, Math.round(Number(height) || 0)))
-      const [, oldH] = win.getSize()
-      if (h === oldH) return
-      // Grow/shrink upward when it sits in the bottom half, so it stays in its corner.
-      const [x, y] = win.getPosition()
-      const wa = screen.getDisplayMatching(win.getBounds()).workArea
-      const bottomHalf = y + oldH / 2 > wa.y + wa.height / 2
-      win.setBounds(onScreen({ x, y: bottomHalf ? y + oldH - h : y, width: WIDTH, height: h }))
-    })
+    ipcMain.on('resize', (_e, height) => fitHeight(height))
 
     render()
     poll()
@@ -475,6 +536,7 @@ if (!app.requestSingleInstanceLock()) {
         fs.writeFileSync(process.env.CUM_SCREENSHOT, img.toPNG())
         console.log('STATE', JSON.stringify(serializable()))
         console.log('TITLE', JSON.stringify(windowTitle()))
+        console.log('BOUNDS', JSON.stringify(win.getBounds()), 'min', win.getMinimumSize(), 'max', win.getMaximumSize())
         app.quit()
       }, 4000)
     }

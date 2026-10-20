@@ -23,9 +23,9 @@ Use either one, or both.
 - Shows your **5-hour window** and **weekly limit** as bars, with the exact percentage and reset time ("Resets 4:18 PM · in 2h 14m"). Any model-specific weekly limits appear too.
 - **Pace check:** a thinner bar under each one shows how much of the window has passed, so you can see whether you're using it faster than time is passing. A line underneath says where you're heading, like "66% of week gone · on pace for ~49%". If you'd run out before the reset, it warns you in amber, like "out by Tue 12:14 AM". Turn it off with **⋯ → Show time elapsed**.
 - Colors change as you get closer: **green** below 75%, **amber** from 75%, **red** from 90%.
-- **Stays on top** of other windows. Drag it anywhere, and it opens in the same spot next time.
+- **Stays on top** of other windows. Drag it anywhere, and drag its left or right edge to make it wider or narrower. It opens in the same spot and size next time, and its height always fits what's shown.
 - The **taskbar button shows the numbers** too (e.g. "Claude 42% · 18%"), even when it's minimized.
-- **Windows notifications** when either limit crosses 75% and 90%, once per window.
+- **Windows notifications** when either limit crosses 75% and 90%, once per window. There's no pop-up when you're already looking at the widget, for example right after you click refresh.
 - Refreshes every 5 minutes. You can change that to 2, 10, or 15.
 - Optionally starts with Windows. It follows your light or dark theme.
 
@@ -54,12 +54,13 @@ If both are available, the widget uses Claude Code first. To choose, use **⋯ �
 | To… | Do this |
 | --- | --- |
 | Move it | Drag the title bar |
+| Make it wider or narrower | Drag its left or right edge |
 | Refresh now | Click **↻** |
 | Change settings | Right-click anywhere, or click **⋯** |
 | Hide it for a while | Click **–** (minimize) |
 | Close it | Click **✕**, then reopen from the desktop or Start menu |
 
-Settings include Read usage with (Claude Code or claude.ai), Sign in to / Sign out of claude.ai, Show time elapsed, Always on top, Check every, Alert at 75% and 90%, Start with Windows, Auto-renew sign-in, and Move to bottom-right corner.
+Settings include Read usage with (Claude Code or claude.ai), Sign in to / Sign out of claude.ai, Show time elapsed, Always on top, Check every, Alert at 75% and 90%, Start with Windows, Auto-renew sign-in, Move to bottom-right corner, and Open log file.
 
 ### Troubleshooting
 
@@ -83,6 +84,9 @@ Claude Code is using an Anthropic API key, not a Claude subscription. API keys d
 
 **It shows an error after it was working**
 Anthropic may have changed the usage endpoint. Check for a newer release, or [open an issue](https://github.com/brianwaletzko/claude-usage-meter/issues).
+
+**Reporting a problem**
+Click **⋯ → Open log file**. The log lists each check, error and alert with the time. It never contains your sign-in. Include the relevant lines when you [open an issue](https://github.com/brianwaletzko/claude-usage-meter/issues).
 
 ---
 
@@ -115,7 +119,7 @@ The desktop widget:
 - **With Claude Code:** it reads the sign-in token that Claude Code saves on your computer. It **never changes, refreshes, or copies** that file, so it can't sign you out of Claude Code. It sends that token **only to `api.anthropic.com`**.
 - **With claude.ai:** you sign in on claude.ai's real sign-in page, inside the app, and the app never sees your password. The sign-in is kept in the app's own private browser profile, separate from your normal browser, and is sent **only to `claude.ai`**. **Sign out of claude.ai** in the menu deletes it.
 - It doesn't talk to any other server, and it has no analytics or tracking.
-- Stores its settings (window position, refresh interval, alert history) in `%APPDATA%\Claude Usage Meter\config.json`.
+- Stores its settings (window position and size, refresh interval, alert history) in `%APPDATA%\Claude Usage Meter\config.json`, and a troubleshooting log in `meter.log` in the same folder.
 
 The usage endpoints (`api.anthropic.com/api/oauth/usage` and claude.ai's `/api/organizations/…/usage`) are **undocumented**. Other community usage meters use it too, but Anthropic hasn't published it and could change or remove it without notice.
 
@@ -132,6 +136,8 @@ npm test           # unit tests
 npm start          # run it
 npm run dist:win   # build the installer and portable .exe into desktop\dist\
 ```
+
+New versions are built automatically. Pushing a version tag (e.g. `v0.5.0`, matching `desktop/package.json`) runs the [Release desktop app](.github/workflows/release-desktop.yml) workflow. It tests, builds, and attaches both `.exe` files to the GitHub Release.
 
 The plugin is at the repository root ([`hooks/`](hooks/), [`.claude-plugin/`](.claude-plugin/)). To check it, run:
 

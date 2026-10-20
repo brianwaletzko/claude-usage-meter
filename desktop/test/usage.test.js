@@ -182,3 +182,27 @@ test('pace: gives up on missing or inconsistent reset times', () => {
   assert.equal(U.pace({ percent: 10, resetsAt: new Date(now.getTime() + 6 * 3600e3) }, h5, now), null)
   assert.equal(U.pace(null, h5, now), null)
 })
+
+test('alerts: a reset time that wobbles by a second is still the same window', () => {
+  const at = (iso, percent) => ({ percent, resetsAt: new Date(iso) })
+  let r = U.checkAlert({}, 'fiveHour', at('2026-10-13T03:29:59.659Z', 80))
+  assert.equal(r.fire, 75)
+  r = U.checkAlert(r.seen, 'fiveHour', at('2026-10-13T03:30:00.642Z', 81)) // same window, new timestamp
+  assert.equal(r.fire, null)
+  r = U.checkAlert(r.seen, 'fiveHour', at('2026-10-13T08:30:00.000Z', 80)) // next window: fires again
+  assert.equal(r.fire, 75)
+})
+
+test('log file: local-time lines, and starts over when it gets too big', () => {
+  const { createLogger } = require('../src/log')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cum-log-'))
+  const file = path.join(dir, 'meter.log')
+  const log = createLogger(file, { maxBytes: 200, now: () => new Date(2026, 9, 20, 14, 3, 22) })
+  log.info('started')
+  assert.equal(fs.readFileSync(file, 'utf8'), '2026-10-20 14:03:22 INFO  started\n')
+  for (let i = 0; i < 10; i++) log.warn(`check ${i} failed`)
+  assert.ok(fs.statSync(file).size <= 200)
+  assert.ok(fs.existsSync(path.join(dir, 'meter.old.log')))
+  assert.match(fs.readFileSync(file, 'utf8'), /WARN  check 9 failed\n$/)
+  fs.rmSync(dir, { recursive: true, force: true })
+})

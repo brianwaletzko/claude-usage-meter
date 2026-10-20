@@ -121,6 +121,16 @@ function tooltip(usage, now = new Date()) {
   return lines.join('\n').slice(0, 127)
 }
 
+// The API's reset time wobbles by a second or so between checks
+// (e.g. 03:29:59.659Z, then 03:30:00.642Z), so treat reset times this close
+// together as the same window. Real windows are hours or days apart.
+const SAME_WINDOW_MS = 10 * 60 * 1000
+
+function sameWindow(a, b) {
+  if (!a || !b) return a === b
+  return Math.abs(Date.parse(a) - Date.parse(b)) < SAME_WINDOW_MS
+}
+
 /**
  * Decides which alert (if any) to raise for one window.
  * `seen` is { [windowKey]: { resetsAt: iso|null, level: number } } and is
@@ -132,7 +142,7 @@ function checkAlert(seen, key, win, thresholds = ALERT_THRESHOLDS) {
   if (!win) return { seen: next, fire: null }
   const resetIso = win.resetsAt ? win.resetsAt.toISOString() : null
   const prev = next[key]
-  const prevLevel = prev && prev.resetsAt === resetIso ? prev.level : 0
+  const prevLevel = prev && sameWindow(prev.resetsAt, resetIso) ? prev.level : 0
   const crossed = thresholds.filter(t => win.percent >= t && t > prevLevel)
   const top = crossed.length ? crossed[crossed.length - 1] : null
   next[key] = { resetsAt: resetIso, level: top ?? prevLevel }

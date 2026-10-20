@@ -119,7 +119,6 @@ function draw() {
     $('renew').textContent = s.renewing ? 'Renewing…' : 'Renew sign-in'
   }
 
-  requestAnimationFrame(() => window.meter.resize(document.documentElement.scrollHeight))
 }
 
 window.meter.onState(s => {
@@ -138,6 +137,13 @@ document.addEventListener('contextmenu', e => {
   e.preventDefault()
   window.meter.menu()
 })
+
+// Keep the window exactly as tall as the content. Measure the body itself:
+// the page's scrollHeight never drops below the window's current height, which
+// left empty space at the bottom after a message went away.
+new ResizeObserver(() => {
+  window.meter.resize(Math.ceil(document.body.getBoundingClientRect().height))
+}).observe(document.body)
 
 // Keep "in 2h 14m" and "Updated 3m ago" current between polls.
 setInterval(draw, 30_000)

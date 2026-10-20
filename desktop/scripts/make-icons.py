@@ -1,6 +1,6 @@
 """Generates the tray icons (0-100, idle, error) and the app icon.
 
-Run: python3 scripts/make-icons.py   (needs Pillow)
+Run: python3 scripts/make-icons.py   (needs Pillow; on Windows: python scripts\\make-icons.py)
 """
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
@@ -9,7 +9,16 @@ ROOT = Path(__file__).resolve().parent.parent
 TRAY = ROOT / "assets" / "tray"
 TRAY.mkdir(parents=True, exist_ok=True)
 
-FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf"
+# First bold font found: Linux (what the shipped icons were made with), then Windows, then macOS.
+FONT_CANDIDATES = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "C:/Windows/Fonts/segoeuib.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+]
+FONT = next((f for f in FONT_CANDIDATES if Path(f).exists()), None)
+if FONT is None:
+    raise SystemExit("No bold font found. Add one to FONT_CANDIDATES in make-icons.py.")
 SCALES = {"": 16, "@1.25x": 20, "@1.5x": 24, "@2x": 32}
 
 OK = (31, 157, 99)
