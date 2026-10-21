@@ -1,42 +1,41 @@
-# Claude Usage Meter (Windows desktop widget)
+# Claude Usage Meter: desktop widget source
 
-A small always-on-top window, like a sticky note in the corner of your screen, that shows how much of your Claude plan you've used. It shows both the **5-hour window** and the **weekly limit**, so you know when you're getting close.
+This folder is the source for the Windows desktop widget. For what it does, how to install it, and troubleshooting, see the [main README](../README.md).
 
-- Each limit has a bar. It's green below 75%, amber from 75%, and red from 90%. Reset times are shown like "Resets 4:18 PM · in 2h 14m". Any model-specific weekly pools appear too.
-- Drag it by its title bar to wherever you like. It remembers the spot next time.
-- The taskbar shows the numbers too (e.g. "Claude 42% · 18%"), even when it's minimized.
-- You get a Windows notification when either limit crosses 75% and 90%. You get each one once per window.
-- Right-click it (or click **⋯**) for settings: Always on top, Check every, Alerts, Start with Windows, Renew sign-in, and Move to bottom-right corner.
-- **✕** closes the app. Launch it again from the desktop or Start menu shortcut.
+## Build and run
 
-## Requirements
+You need a current LTS version of Node.js.
 
-Sign in one of two ways:
-- **claude.ai:** click **Sign in to claude.ai** in the widget and sign in in the window that opens. Use the email option if Google sign-in refuses. The sign-in stays in the app's own private browser profile and is only sent to claude.ai.
-- **Claude Code:** if Claude Code is installed and signed in (run `claude` once), the app reuses that sign-in from `%USERPROFILE%\.claude\.credentials.json`. It only reads that file and never changes it.
-
-By default it uses Claude Code first, then claude.ai. To choose, use **⋯ → Read usage with**.
-
-## How it works
-
-Every 5 minutes (you can change this to 2, 10 or 15), the app asks Anthropic for your usage: `api.anthropic.com/api/oauth/usage` with a Claude Code sign-in, or claude.ai's own usage endpoint with a claude.ai sign-in. Checking it does not count against your usage.
-
-**This endpoint is undocumented.** Anthropic could change it at any time, and the app would show an error until it's updated.
-
-### When the sign-in expires
-
-Claude Code renews its own sign-in each time you use it. If you mostly use claude.ai and not Claude Code, the saved sign-in can expire. When that happens, the widget says so and offers **Renew sign-in**. That button runs a one-line Claude Code prompt on the cheapest model (`claude -p ok --model haiku --max-turns 1`) so Claude Code refreshes its sign-in. It uses a tiny amount of your plan. If you'd rather not click it each time, turn on **Auto-renew when expired** in the menu. Auto-renew runs at most once every 10 minutes.
-
-## Install
-
-Run `Claude-Usage-Meter-Setup-<version>.exe`. It adds a desktop shortcut and a Start menu entry. The app isn't code-signed, so Windows SmartScreen may warn you. Click **More info → Run anyway**. It installs for your user only, with no admin needed. To remove it, use **Settings → Apps**.
-
-## Build from source
-
-```
+```powershell
 npm install
-npm run icons        # needs Python 3 + Pillow; regenerates assets/
-npm test
-npm start            # run it locally
-npm run dist:win     # build the installer into dist/
+npm test             # unit tests (node --test)
+npm start            # run it from source
+npm run dist:win     # build the installer and portable .exe into dist\
+npm run icons        # regenerate assets\ (needs Python 3 + Pillow)
 ```
+
+If you start it from a VS Code or Claude Code terminal and it fails with `Cannot read properties of undefined`, clear `ELECTRON_RUN_AS_NODE` first: `Remove-Item Env:ELECTRON_RUN_AS_NODE`.
+
+Releases are built by GitHub Actions when a `v*` tag matching `package.json` is pushed (see [`.github/workflows/release-desktop.yml`](../.github/workflows/release-desktop.yml)).
+
+## Layout
+
+| Path | What it is |
+| --- | --- |
+| `src/main.js` | Electron main process: settings, polling, menu, window sizing, notifications, sign-in renewal |
+| `src/usage.js` | Pure logic with no Electron, unit-tested: parsing, formatting, alerts, pace, backoff, source choice |
+| `src/credentials.js` | Reads Claude Code's saved sign-in (read only) |
+| `src/claudeai.js` | claude.ai sign-in window and usage requests, in a separate browser profile |
+| `src/log.js` | The troubleshooting log (`meter.log`) |
+| `src/popup.html`, `src/popup.js`, `src/preload.js` | The widget's UI and its bridge to the main process |
+| `test/usage.test.js` | Unit tests |
+
+## Testing hooks
+
+These environment variables are for development only:
+
+| Variable | Effect |
+| --- | --- |
+| `CUM_USER_DATA=<folder>` | Use a separate settings and sign-in folder, so a dev copy can run alongside the installed app |
+| `CUM_USAGE_URL=<url>` | Read usage from a mock server instead of Anthropic (Claude Code sign-in path) |
+| `CUM_SCREENSHOT=<file.png>` | Save a screenshot of the window after about 4 seconds, print the state and window size, then quit |

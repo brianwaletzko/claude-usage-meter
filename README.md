@@ -9,7 +9,7 @@ Claude plans have a **5-hour usage window** and a **weekly limit**. This project
 
 Use either one, or both.
 
-<p align="center"><img src="docs/screenshot.png" alt="Claude Usage Meter desktop widget showing the 5-hour window at 9% and the weekly limit at 32%, with reset times" width="360"></p>
+<p align="center"><img src="docs/screenshot.png" alt="Claude Usage Meter desktop widget. The 5-hour window is at 22% with 92% of the window gone, on pace for about 24%. The weekly limit is at 74% with 87% of the week gone, on pace for about 85%. Each has a green usage bar above a grey time-elapsed bar, plus its reset time." width="360"></p>
 
 > **Unofficial.** This is a personal project. It is not made, endorsed, or supported by Anthropic. It relies on an undocumented endpoint that could change at any time (see [How it works](#how-it-works)).
 
@@ -21,7 +21,7 @@ Use either one, or both.
 
 - Works with **Claude Code** or just a **claude.ai account**. If you don't use Claude Code, sign in to claude.ai right inside the app.
 - Shows your **5-hour window** and **weekly limit** as bars, with the exact percentage and reset time ("Resets 4:18 PM · in 2h 14m"). Any model-specific weekly limits appear too.
-- **Pace check:** a thinner bar under each one shows how much of the window has passed, so you can see whether you're using it faster than time is passing. A line underneath says where you're heading, like "66% of week gone · on pace for ~49%". If you'd run out before the reset, it warns you in amber, like "out by Tue 12:14 AM". Turn it off with **⋯ → Show time elapsed**.
+- **Pace check:** a thinner bar under each one shows how much of the window has passed, so you can see whether you're using it faster than time is passing. A line underneath says where you're heading, like "66% of week gone · on pace for ~49%". If you'd run out before the reset, it warns you in amber, like "out by Tue 12:14 AM". The projection appears once 10% of a window has passed, since earlier guesses jump around. Turn it off with **⋯ → Show time elapsed**.
 - Colors change as you get closer: **green** below 75%, **amber** from 75%, **red** from 90%.
 - **Stays on top** of other windows. Drag it anywhere, and drag its left or right edge to make it wider or narrower. It opens in the same spot and size next time, and its height always fits what's shown.
 - The **taskbar button shows the numbers** too (e.g. "Claude 42% · 18%"), even when it's minimized.
@@ -37,12 +37,14 @@ Use either one, or both.
 
 Prefer not to install anything? Download `Claude-Usage-Meter-Portable-<version>.exe` instead and run it directly.
 
+To update, close the widget (**✕**) and run the newer installer. It replaces the old version and keeps your settings and sign-in.
+
 To uninstall, go to **Settings → Apps → Installed apps → Claude Usage Meter**.
 
 ### Requirements
 
 - Windows 10 or 11 (64-bit)
-- A Claude account with usage limits. Pro and Max have been tested.
+- A paid Claude plan with usage limits, such as Pro or Max
 - One of these two ways to sign in:
   - **claude.ai (no extra software needed).** On first launch, click **Sign in to claude.ai** and sign in in the window that opens. The app remembers it.
   - **Claude Code.** If Claude Code is installed and signed in, the widget reuses that sign-in automatically, so there's nothing to enter.
@@ -60,7 +62,12 @@ If both are available, the widget uses Claude Code first. To choose, use **⋯ �
 | Hide it for a while | Click **–** (minimize) |
 | Close it | Click **✕**, then reopen from the desktop or Start menu |
 
-Settings include Read usage with (Claude Code or claude.ai), Sign in to / Sign out of claude.ai, Show time elapsed, Always on top, Check every, Alert at 75% and 90%, Start with Windows, Auto-renew sign-in, Move to bottom-right corner, and Open log file.
+The menu has:
+
+- **Display:** Always on top, Move to bottom-right corner, Show time elapsed
+- **Checking:** Refresh now, Check every (2, 5, 10, or 15 minutes), Alert at 75% and 90%, Start with Windows
+- **Sign-in:** Read usage with (Claude Code or claude.ai), Sign in to / Sign out of claude.ai, Renew sign-in, Auto-renew when expired
+- **Other:** Open Claude usage page, Open log file, Quit
 
 ### Troubleshooting
 
@@ -121,7 +128,7 @@ The desktop widget:
 - It doesn't talk to any other server, and it has no analytics or tracking.
 - Stores its settings (window position and size, refresh interval, alert history) in `%APPDATA%\Claude Usage Meter\config.json`, and a troubleshooting log in `meter.log` in the same folder.
 
-The usage endpoints (`api.anthropic.com/api/oauth/usage` and claude.ai's `/api/organizations/…/usage`) are **undocumented**. Other community usage meters use it too, but Anthropic hasn't published it and could change or remove it without notice.
+The usage endpoints (`api.anthropic.com/api/oauth/usage` and claude.ai's `/api/organizations/…/usage`) are **undocumented**. Other community usage meters use them too, but Anthropic hasn't published them and could change or remove them without notice.
 
 ---
 
@@ -137,7 +144,7 @@ npm start          # run it
 npm run dist:win   # build the installer and portable .exe into desktop\dist\
 ```
 
-New versions are built automatically. Pushing a version tag (e.g. `v0.5.0`, matching `desktop/package.json`) runs the [Release desktop app](.github/workflows/release-desktop.yml) workflow. It tests, builds, and attaches both `.exe` files to the GitHub Release.
+New versions are built automatically. Pushing a version tag (e.g. `v0.6.0`, matching `desktop/package.json`) runs the [Release desktop app](.github/workflows/release-desktop.yml) workflow. It tests, builds, and attaches both `.exe` files to the GitHub Release.
 
 The plugin is at the repository root ([`hooks/`](hooks/), [`.claude-plugin/`](.claude-plugin/)). To check it, run:
 
