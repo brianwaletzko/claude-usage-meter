@@ -1,6 +1,6 @@
 {
   "name": "usage-meter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shows your 5-hour and weekly Claude plan usage under the prompt, with heads-up toasts at 50/75/90%.",
   "author": { "name": "Brian Waletzko" },
   "repository": "https://github.com/brianwaletzko/claude-usage-meter",
