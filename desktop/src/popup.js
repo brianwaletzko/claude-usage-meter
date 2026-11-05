@@ -149,5 +149,5 @@ new ResizeObserver(() => {
   window.meter.resize(Math.ceil(document.body.getBoundingClientRect().height))
 }).observe(document.body)
 
-// Keep "in 2h 14m" and "Updated 3m ago" current between polls.
-setInterval(draw, 30_000)
+// "in 2h 14m" and "Updated 3m ago" stay current because the main process
+// re-sends the state every 30s, which redraws.

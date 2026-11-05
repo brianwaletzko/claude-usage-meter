@@ -17,6 +17,7 @@ const USAGE_URL = process.env.CUM_USAGE_URL || U.USAGE_URL // override is for lo
 const RELEASES_URL = process.env.CUM_RELEASES_URL || U.RELEASES_URL // override is for local testing only
 const USAGE_PAGE = 'https://claude.ai/settings/usage'
 const UPDATE_EVERY_MS = 24 * 3600 * 1000
+const UPDATE_RETRY_MS = 60 * 60 * 1000 // after a failed check (e.g. started before Wi-Fi connected)
 // Let the first usage check go first (sooner with a test URL, so CUM_SCREENSHOT can catch it).
 const UPDATE_FIRST_DELAY_MS = process.env.CUM_RELEASES_URL ? 1000 : 15 * 1000
 const ASSETS = path.join(__dirname, '..', 'assets')
@@ -25,7 +26,7 @@ const MIN_WIDTH = 280 // the user can drag the left/right edge between these;
 const MAX_WIDTH = 640 // height always fits the content
 const MARGIN = 12
 // A dev copy's pop-ups look exactly like the installed app's, so label them.
-const TEST_COPY = Boolean(process.env.CUM_USER_DATA || process.env.CUM_USAGE_URL || process.env.CUM_RELEASES_URL)
+const TEST_COPY = Boolean(process.env.CUM_USER_DATA || process.env.CUM_USAGE_URL || process.env.CUM_RELEASES_URL || process.env.CUM_SCREENSHOT)
 const popupTitle = t => (TEST_COPY ? `[Test copy] ${t}` : t)
 
 let log = createLogger(path.join(require('os').tmpdir(), 'claude-usage-meter.log')) // replaced once app paths are ready
@@ -60,6 +61,9 @@ function loadConfig() {
   } catch {
     config = { ...DEFAULTS }
   }
+  // The file can be edited by hand; a bad interval would make the app check non-stop.
+  const minutes = Number(config.pollMinutes)
+  config.pollMinutes = Number.isFinite(minutes) && minutes >= 1 ? Math.min(minutes, 60) : DEFAULTS.pollMinutes
 }
 
 function saveConfig() {
@@ -90,6 +94,8 @@ let win = null
 let timer = null
 let failures = 0
 let lastRenewAt = 0
+let pollSeq = 0 // a usage check that finishes after a newer one started is ignored
+let updateTimer = null
 
 const ERROR_TEXT = {
   'not-found': 'No sign-in found. Sign in to claude.ai here, or install Claude Code and run "claude" once.',
@@ -116,6 +122,7 @@ function setError(kind, detail) {
 // manual: the user asked for this check (refresh, changed a setting, signed in),
 // so they're looking at the widget and don't need a pop-up notification too.
 async function poll({ manual = false } = {}) {
+  const seq = ++pollSeq
   clearTimeout(timer)
   state.checkedAt = Date.now()
   let kind = null
@@ -123,9 +130,12 @@ async function poll({ manual = false } = {}) {
   try {
     const creds = readCredentials()
     const expired = creds.ok && isExpired(creds)
-    state.webSignedIn = await web.isSignedIn().catch(() => false)
-    state.source = U.chooseSource(config.source, { ok: creds.ok, expired }, state.webSignedIn)
-    const r = state.source === 'web' ? await readWeb() : await readCode(creds, expired)
+    const webSignedIn = await web.isSignedIn().catch(() => false)
+    const source = U.chooseSource(config.source, { ok: creds.ok, expired }, webSignedIn)
+    const r = source === 'web' ? await readWeb() : await readCode(creds, expired)
+    if (seq !== pollSeq) return // a newer check (e.g. a refresh) started meanwhile and reports instead
+    state.webSignedIn = webSignedIn
+    state.source = source
     if (r.ok) {
       try {
         state.usage = U.parseUsage(r.json)
@@ -143,6 +153,7 @@ async function poll({ manual = false } = {}) {
       setError(kind, r.detail)
     }
   } catch (err) {
+    if (seq !== pollSeq) return
     kind = 'network'
     setError(kind, err.message)
   }
@@ -177,6 +188,7 @@ async function readCode(creds, expired) {
       'User-Agent': `claude-usage-meter/${app.getVersion()}`,
       Accept: 'application/json',
     },
+    signal: AbortSignal.timeout(U.REQUEST_TIMEOUT_MS),
   })
   if (res.status === 401 || res.status === 403) {
     if (config.autoRenew) renewSignIn({ quiet: true })
@@ -257,9 +269,11 @@ function renewSignIn({ quiet = false } = {}) {
   log.info(`Renewing Claude Code sign-in (${quiet ? 'automatic' : 'requested'})`)
   state.renewing = true
   render()
+  const help = 'Make sure the "claude" command works in a terminal.'
   let child
   try {
-    child = spawn('claude', ['-p', 'ok', '--model', 'haiku', '--max-turns', '1'], {
+    // One string rather than an args array: with shell: true Node only concatenates them anyway.
+    child = spawn('claude -p ok --model haiku --max-turns 1', {
       shell: true,
       windowsHide: true,
       timeout: 90_000,
@@ -267,19 +281,28 @@ function renewSignIn({ quiet = false } = {}) {
     })
   } catch {
     state.renewing = false
-    if (!quiet) notify('Could not run Claude Code', 'Make sure the "claude" command works in a terminal.')
+    if (!quiet) notify('Could not run Claude Code', help)
     render()
     return
   }
-  child.on('error', err => {
-    log.warn(`Could not run Claude Code to renew: ${err.message}`)
-    if (!quiet) notify('Could not run Claude Code', 'Make sure the "claude" command works in a terminal.')
-  })
-  child.on('exit', code => {
-    log.info(`Claude Code renew finished (exit code ${code})`)
+  // 'exit' doesn't always follow 'error' (and on Windows a missing command raises
+  // no 'error' at all: the shell just exits non-zero), so both end here.
+  let done = false
+  const finish = (ok, why) => {
+    if (done) return
+    done = true
     state.renewing = false
+    if (ok) {
+      log.info('Claude Code renew finished')
+    } else {
+      log.warn(`Claude Code renew failed: ${why}`)
+      if (!quiet) notify('Claude Code could not renew the sign-in', `${why}. ${help}`)
+    }
+    render()
     poll({ manual: !quiet })
-  })
+  }
+  child.on('error', err => finish(false, `Could not run it (${err.message})`))
+  child.on('exit', code => finish(code === 0, code === null ? 'It did not finish in time' : `It exited with code ${code}`))
 }
 
 function notify(title, body, onClick) {
@@ -294,15 +317,18 @@ function notify(title, body, onClick) {
 // Only asks GitHub whether a newer release exists and offers its page.
 // Nothing is downloaded or installed by the app.
 // manual: the user picked "Check for updates now", so always say what was found.
+// Returns false when GitHub couldn't be reached.
 async function checkForUpdate({ manual = false } = {}) {
-  if (state.checkingUpdate) return
+  if (state.checkingUpdate) return true
   state.checkingUpdate = true
+  let ok = true
   try {
     const res = await net.fetch(RELEASES_URL, {
       headers: {
         Accept: 'application/vnd.github+json',
         'User-Agent': `claude-usage-meter/${app.getVersion()}`,
       },
+      signal: AbortSignal.timeout(U.REQUEST_TIMEOUT_MS),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
@@ -320,12 +346,23 @@ async function checkForUpdate({ manual = false } = {}) {
       notify('Claude Usage Meter is up to date', `You have the latest version (${app.getVersion()}).`)
     }
   } catch (err) {
+    ok = false
     log.warn(`Update check failed: ${err.message}`)
     if (manual) notify("Couldn't check for updates", 'GitHub could not be reached. Try again later.')
   } finally {
     state.checkingUpdate = false
     render()
   }
+  return ok
+}
+
+// Daily while "Check for updates automatically" is on; a failed check is retried sooner.
+function scheduleUpdateCheck(delay) {
+  clearTimeout(updateTimer)
+  updateTimer = setTimeout(async () => {
+    const ok = config.checkUpdates ? await checkForUpdate() : true
+    scheduleUpdateCheck(ok ? UPDATE_EVERY_MS : UPDATE_RETRY_MS)
+  }, delay)
 }
 
 function openUpdatePage() {
@@ -477,12 +514,22 @@ function createWindow() {
 // screen. Keeps it fully on a screen in case monitors changed since last run.
 function placeWindow() {
   if (!win) return
-  const [w, h] = win.getSize()
+  const w = clampWidth(config.width)
+  const h = win.getSize()[1]
   const saved = config.position
   const wa = (saved ? screen.getDisplayNearestPoint(saved) : screen.getPrimaryDisplay()).workArea
   const x = saved ? saved.x : wa.x + wa.width - w - MARGIN
   const y = saved ? saved.y : wa.y + wa.height - h - MARGIN
-  win.setBounds(onScreen({ x, y, width: w, height: h }))
+  setBounds({ x, y, width: w, height: h })
+}
+
+// At 125%/150% display scaling a resizable window grows a pixel or two on
+// every programmatic resize (the width once crept wider and wider), so
+// resizing is switched off while the size is set. Always pass config.width.
+function setBounds(b) {
+  win.setResizable(false)
+  win.setBounds(onScreen(b))
+  win.setResizable(true)
 }
 
 function clampWidth(w) {
@@ -504,12 +551,7 @@ function fitHeight(contentHeight) {
   const width = clampWidth(config.width)
   const wa = screen.getDisplayMatching(win.getBounds()).workArea
   const bottomHalf = y + oldH / 2 > wa.y + wa.height / 2
-  // A resizable window grows a pixel or two on every programmatic resize at
-  // those scalings (the width crept wider and wider), so switch resizing off
-  // while setting the size.
-  win.setResizable(false)
-  win.setBounds(onScreen({ x, y: bottomHalf ? y + oldH - h : y, width, height: h }))
-  win.setResizable(true)
+  setBounds({ x, y: bottomHalf ? y + oldH - h : y, width, height: h })
 }
 
 function onScreen(b) {
@@ -543,10 +585,9 @@ function serializable() {
     source: state.source,
     webSignedIn: state.webSignedIn,
     showPace: Boolean(config.showPace),
-    // The banner shows until dismissed; the menu keeps the download link either way.
-    update: state.update && config.checkUpdates && config.dismissedVersion !== state.update.version
-      ? { version: state.update.version }
-      : null,
+    // The banner shows until dismissed (whether the check was automatic or from the
+    // menu); the menu keeps the download link either way.
+    update: state.update && config.dismissedVersion !== state.update.version ? { version: state.update.version } : null,
     usage: u ? {
       fiveHour: w(u.fiveHour, U.WINDOW_MS.fiveHour),
       weekly: w(u.weekly, U.WINDOW_MS.weekly),
@@ -611,11 +652,10 @@ if (!app.requestSingleInstanceLock()) {
 
     render()
     poll()
-    // Re-send so the time-elapsed bars keep moving between usage checks.
+    // Re-send every 30s so the time-elapsed bars, "in 2h 14m" and "Updated 3m ago"
+    // stay current between usage checks; the page redraws on each message.
     setInterval(sendState, 30_000)
-    const autoUpdateCheck = () => { if (config.checkUpdates) checkForUpdate() }
-    setTimeout(autoUpdateCheck, UPDATE_FIRST_DELAY_MS)
-    setInterval(autoUpdateCheck, UPDATE_EVERY_MS)
+    scheduleUpdateCheck(UPDATE_FIRST_DELAY_MS)
 
     // Testing hook: save a screenshot of the window, then quit.
     if (process.env.CUM_SCREENSHOT) {

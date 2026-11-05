@@ -46,12 +46,6 @@ test('tolerates missing windows but rejects empty responses', () => {
   assert.throws(() => U.parseUsage(null), /invalid response/)
 })
 
-test('levels match the alert thresholds', () => {
-  assert.equal(U.level(74.9), 'ok')
-  assert.equal(U.level(75), 'warn')
-  assert.equal(U.level(90), 'high')
-})
-
 test('relative time formatting', () => {
   const now = new Date('2026-10-12T18:00:00Z')
   assert.equal(U.formatRelative(new Date('2026-10-12T20:14:00Z'), now), 'in 2h 14m')
@@ -64,12 +58,6 @@ test('clock shows time today and weekday otherwise', () => {
   const now = new Date(2026, 9, 12, 13, 0) // local time
   assert.equal(U.formatClock(new Date(2026, 9, 12, 15, 15), now), '3:15 PM')
   assert.equal(U.formatClock(new Date(2026, 9, 15, 9, 0), now), 'Thu 9:00 AM')
-})
-
-test('tooltip stays under the Windows 127-char cap', () => {
-  const t = U.tooltip(U.parseUsage(SAMPLE))
-  assert.ok(t.startsWith('Claude usage\n5-hour: 42%'))
-  assert.ok(t.length <= 127)
 })
 
 test('alerts fire once per threshold per window, and re-arm on a new window', () => {

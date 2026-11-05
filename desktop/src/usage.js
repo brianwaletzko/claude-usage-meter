@@ -6,6 +6,7 @@
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
 const BETA_HEADER = 'oauth-2025-04-20'
 const ALERT_THRESHOLDS = [75, 90]
+const REQUEST_TIMEOUT_MS = 30 * 1000 // a request that hangs would otherwise stop all later checks
 
 function toPercent(v) {
   const n = typeof v === 'number' ? v : Number(v)
@@ -72,12 +73,6 @@ function parseUsage(data) {
   return { fiveHour, weekly, extras }
 }
 
-function level(percent) {
-  if (percent >= 90) return 'high'
-  if (percent >= 75) return 'warn'
-  return 'ok'
-}
-
 function sameDay(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
@@ -103,22 +98,6 @@ function formatRelative(date, now = new Date()) {
   if (d > 0) return `in ${d}d ${h}h`
   if (h > 0) return `in ${h}h ${m}m`
   return `in ${m}m`
-}
-
-function short(p) {
-  return `${Math.round(p)}%`
-}
-
-/** Windows caps tray tooltips at 127 characters, so keep this compact. */
-function tooltip(usage, now = new Date()) {
-  const lines = ['Claude usage']
-  if (usage.fiveHour) {
-    lines.push(`5-hour: ${short(usage.fiveHour.percent)} (resets ${formatClock(usage.fiveHour.resetsAt, now)})`)
-  }
-  if (usage.weekly) {
-    lines.push(`Weekly: ${short(usage.weekly.percent)} (resets ${formatClock(usage.weekly.resetsAt, now)})`)
-  }
-  return lines.join('\n').slice(0, 127)
 }
 
 // The API's reset time wobbles by a second or so between checks
@@ -248,11 +227,10 @@ module.exports = {
   USAGE_URL,
   BETA_HEADER,
   ALERT_THRESHOLDS,
+  REQUEST_TIMEOUT_MS,
   parseUsage,
-  level,
   formatClock,
   formatRelative,
-  tooltip,
   checkAlert,
   nextDelay,
   chooseSource,

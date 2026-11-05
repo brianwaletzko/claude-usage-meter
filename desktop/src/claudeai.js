@@ -6,7 +6,7 @@
 // Usage is read from the same endpoint claude.ai's own usage page uses.
 
 const { BrowserWindow, session, shell } = require('electron')
-const { pickOrg } = require('./usage')
+const { pickOrg, REQUEST_TIMEOUT_MS } = require('./usage')
 
 const ORIGIN = 'https://claude.ai'
 const PARTITION = 'persist:claudeai'
@@ -112,6 +112,7 @@ async function directGet(path) {
   const res = await getSession().fetch(ORIGIN + path, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
   return { status: res.status, type: res.headers.get('content-type'), body: await res.text() }
 }
@@ -132,7 +133,7 @@ async function pageGet(path) {
       await new Promise(r => setTimeout(r, 500))
     }
     return await win.webContents.executeJavaScript(`
-      fetch(${JSON.stringify(path)}, { headers: { Accept: 'application/json' }, credentials: 'include' })
+      fetch(${JSON.stringify(path)}, { headers: { Accept: 'application/json' }, credentials: 'include', signal: AbortSignal.timeout(${REQUEST_TIMEOUT_MS}) })
         .then(async r => ({ status: r.status, type: r.headers.get('content-type'), body: await r.text() }))
     `)
   } finally {
@@ -159,18 +160,25 @@ async function fetchUsage(savedOrgId) {
   if (!(await isSignedIn())) return { ok: false, kind: 'web-signed-out' }
 
   let orgId = savedOrgId || (await cookie(ORG_COOKIE))
+  let failedOrg = null
   let r
   if (orgId) {
     r = await getJson(`/api/organizations/${encodeURIComponent(orgId)}/usage`)
     // A saved org that no longer works: look it up again below.
-    if (r.status === 403 || r.status === 404) orgId = null
+    if (r.status === 403 || r.status === 404) {
+      failedOrg = orgId
+      orgId = null
+    }
   }
   if (!orgId) {
     const orgs = await getJson('/api/organizations')
     const bad = classify(orgs)
     if (bad) return bad
-    orgId = pickOrg(orgs.json, await cookie(ORG_COOKIE))
-    if (!orgId) return { ok: false, kind: 'web-no-org' }
+    // Leave out the org that just failed, or pickOrg would prefer it again
+    // whenever the lastActiveOrg cookie still names it.
+    const others = Array.isArray(orgs.json) ? orgs.json.filter(o => !(o && o.uuid === failedOrg)) : orgs.json
+    orgId = pickOrg(others, await cookie(ORG_COOKIE))
+    if (!orgId) return r ? classify(r) : { ok: false, kind: 'web-no-org' }
     r = await getJson(`/api/organizations/${encodeURIComponent(orgId)}/usage`)
   }
   const bad = classify(r)
