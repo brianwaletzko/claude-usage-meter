@@ -87,7 +87,7 @@ Your claude.ai sign-in ended (for example, you signed out everywhere). Click **S
 claude.ai occasionally asks browsers to prove they're human. Sign in again from the menu, or wait a few minutes.
 
 **"Your Claude Code sign-in has expired"**
-Claude Code refreshes its sign-in whenever you use it. If you mostly use claude.ai instead, the saved sign-in can expire. If you're also signed in to claude.ai in the app, the widget switches to that automatically. Otherwise click **Renew sign-in**. That runs a one-word Claude Code prompt on the smallest model, which refreshes the sign-in and uses a tiny amount of your plan. To do this automatically, turn on **Auto-renew when expired** in the menu. It runs at most once every 10 minutes.
+Claude Code refreshes its sign-in whenever you use it. If you mostly use claude.ai instead, the saved sign-in can expire. If you're also signed in to claude.ai in the app, the widget switches to that automatically. Otherwise click **Renew sign-in**. That runs a one-word Claude Code prompt on the smallest model, which refreshes the sign-in and uses a tiny amount of your plan. If the command can't run (for example, Claude Code isn't installed), the widget tells you. To do this automatically, turn on **Auto-renew when expired** in the menu. It runs at most once every 10 minutes.
 
 **"Signed in with an API key"**
 Claude Code is using an Anthropic API key, not a Claude subscription. API keys don't have plan limits, so there's nothing to show.
