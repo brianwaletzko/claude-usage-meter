@@ -12,4 +12,6 @@ contextBridge.exposeInMainWorld('meter', {
   minimize: () => ipcRenderer.send('minimize'),
   quit: () => ipcRenderer.send('quit'),
   resize: h => ipcRenderer.send('resize', h),
+  openUpdate: () => ipcRenderer.send('open-update'),
+  dismissUpdate: () => ipcRenderer.send('dismiss-update'),
 })

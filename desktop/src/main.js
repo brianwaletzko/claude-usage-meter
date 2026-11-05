@@ -14,7 +14,11 @@ const { createLogger } = require('./log')
 
 const APP_ID = 'com.brianwaletzko.claudeusagemeter'
 const USAGE_URL = process.env.CUM_USAGE_URL || U.USAGE_URL // override is for local testing only
+const RELEASES_URL = process.env.CUM_RELEASES_URL || U.RELEASES_URL // override is for local testing only
 const USAGE_PAGE = 'https://claude.ai/settings/usage'
+const UPDATE_EVERY_MS = 24 * 3600 * 1000
+// Let the first usage check go first (sooner with a test URL, so CUM_SCREENSHOT can catch it).
+const UPDATE_FIRST_DELAY_MS = process.env.CUM_RELEASES_URL ? 1000 : 15 * 1000
 const ASSETS = path.join(__dirname, '..', 'assets')
 const RENEW_COOLDOWN_MS = 10 * 60 * 1000
 const MIN_WIDTH = 280 // the user can drag the left/right edge between these;
@@ -32,6 +36,9 @@ const DEFAULTS = {
   alerts: true,
   showPace: true, // time-elapsed bar + projection under each window
   autoRenew: false,
+  checkUpdates: true, // ask GitHub once a day whether a newer version is out
+  dismissedVersion: null, // version whose banner the user closed
+  notifiedVersion: null, // version already announced with a pop-up
   source: 'auto', // 'auto' | 'claude-code' | 'claude-ai'
   webOrgId: null, // claude.ai organization whose usage is shown
   position: null, // { x, y } of the window, remembered between runs
@@ -45,7 +52,8 @@ let config = { ...DEFAULTS }
 function loadConfig() {
   configPath = path.join(app.getPath('userData'), 'config.json')
   try {
-    config = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(configPath, 'utf8')) }
+    // Strip a byte-order mark: some editors add one, and it would make JSON.parse fail and reset every setting.
+    config = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(configPath, 'utf8').replace(/^﻿/, '')) }
   } catch {
     config = { ...DEFAULTS }
   }
@@ -71,6 +79,8 @@ const state = {
   renewing: false,
   source: null, // 'code' | 'web': which sign-in the last check used
   webSignedIn: false,
+  update: null, // { version, url } when a newer release is on GitHub
+  checkingUpdate: false,
 }
 
 let win = null
@@ -269,8 +279,62 @@ function renewSignIn({ quiet = false } = {}) {
   })
 }
 
-function notify(title, body) {
-  if (Notification.isSupported()) new Notification({ title, body }).show()
+function notify(title, body, onClick) {
+  if (!Notification.isSupported()) return
+  const n = new Notification({ title, body, icon: path.join(ASSETS, 'icon.png') })
+  if (onClick) n.on('click', onClick)
+  n.show()
+}
+
+// ---------- update check ----------
+
+// Only asks GitHub whether a newer release exists and offers its page.
+// Nothing is downloaded or installed by the app.
+// manual: the user picked "Check for updates now", so always say what was found.
+async function checkForUpdate({ manual = false } = {}) {
+  if (state.checkingUpdate) return
+  state.checkingUpdate = true
+  try {
+    const res = await net.fetch(RELEASES_URL, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': `claude-usage-meter/${app.getVersion()}`,
+      },
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    state.update = U.newerRelease(data, app.getVersion())
+    log.info(`Update check: ${state.update ? `v${state.update.version} available` : `up to date (latest ${data.tag_name})`}`)
+    if (state.update && (manual || config.notifiedVersion !== state.update.version)) {
+      notify(
+        `Claude Usage Meter ${state.update.version} is available`,
+        `You have ${app.getVersion()}. Click to open the download page.`,
+        openUpdatePage,
+      )
+      config.notifiedVersion = state.update.version
+      saveConfig()
+    } else if (manual && !state.update) {
+      notify('Claude Usage Meter is up to date', `You have the latest version (${app.getVersion()}).`)
+    }
+  } catch (err) {
+    log.warn(`Update check failed: ${err.message}`)
+    if (manual) notify("Couldn't check for updates", 'GitHub could not be reached. Try again later.')
+  } finally {
+    state.checkingUpdate = false
+    render()
+  }
+}
+
+function openUpdatePage() {
+  // newerRelease() only lets through links to this project's releases page.
+  const url = state.update ? state.update.url : `${U.RELEASE_PAGE_PREFIX}latest`
+  if (url.startsWith(U.RELEASE_PAGE_PREFIX)) shell.openExternal(url)
+}
+
+function dismissUpdate() {
+  if (!state.update) return
+  log.info(`Update banner for v${state.update.version} dismissed`)
+  setSetting('dismissedVersion', state.update.version)
 }
 
 // ---------- menu ----------
@@ -315,6 +379,18 @@ function buildMenu() {
       : { label: 'Sign in to claude.ai…', click: () => signInToClaudeAi() },
     { label: 'Open Claude usage page', click: () => shell.openExternal(USAGE_PAGE) },
     { label: 'Open log file', click: () => shell.openPath(log.file) },
+    { type: 'separator' },
+    ...(state.update ? [{ label: `Download version ${state.update.version}…`, click: () => openUpdatePage() }] : []),
+    {
+      label: state.checkingUpdate ? 'Checking for updates…' : 'Check for updates now',
+      enabled: !state.checkingUpdate,
+      click: () => checkForUpdate({ manual: true }),
+    },
+    {
+      label: 'Check for updates automatically', type: 'checkbox', checked: config.checkUpdates,
+      click: i => { setSetting('checkUpdates', i.checked); if (i.checked) checkForUpdate() },
+    },
+    { label: `Version ${app.getVersion()}`, enabled: false },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ])
@@ -464,6 +540,10 @@ function serializable() {
     source: state.source,
     webSignedIn: state.webSignedIn,
     showPace: Boolean(config.showPace),
+    // The banner shows until dismissed; the menu keeps the download link either way.
+    update: state.update && config.checkUpdates && config.dismissedVersion !== state.update.version
+      ? { version: state.update.version }
+      : null,
     usage: u ? {
       fiveHour: w(u.fiveHour, U.WINDOW_MS.fiveHour),
       weekly: w(u.weekly, U.WINDOW_MS.weekly),
@@ -523,11 +603,16 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.on('minimize', () => win && win.minimize())
     ipcMain.on('quit', () => app.quit())
     ipcMain.on('resize', (_e, height) => fitHeight(height))
+    ipcMain.on('open-update', () => openUpdatePage())
+    ipcMain.on('dismiss-update', () => dismissUpdate())
 
     render()
     poll()
     // Re-send so the time-elapsed bars keep moving between usage checks.
     setInterval(sendState, 30_000)
+    const autoUpdateCheck = () => { if (config.checkUpdates) checkForUpdate() }
+    setTimeout(autoUpdateCheck, UPDATE_FIRST_DELAY_MS)
+    setInterval(autoUpdateCheck, UPDATE_EVERY_MS)
 
     // Testing hook: save a screenshot of the window, then quit.
     if (process.env.CUM_SCREENSHOT) {

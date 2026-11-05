@@ -37,6 +37,8 @@ Use either one, or both.
 
 Prefer not to install anything? Download `Claude-Usage-Meter-Portable-<version>.exe` instead and run it directly.
 
+The widget checks GitHub once a day and shows a banner when a newer version is out. Click **Download** to open the release page. It never downloads or installs anything by itself. To turn the check off, untick **⋯ → Check for updates automatically**.
+
 To update, close the widget (**✕**) and run the newer installer. It replaces the old version and keeps your settings and sign-in.
 
 To uninstall, go to **Settings → Apps → Installed apps → Claude Usage Meter**.
@@ -67,6 +69,7 @@ The menu has:
 - **Display:** Always on top, Move to bottom-right corner, Show time elapsed
 - **Checking:** Refresh now, Check every (2, 5, 10, or 15 minutes), Alert at 75% and 90%, Start with Windows
 - **Sign-in:** Read usage with (Claude Code or claude.ai), Sign in to / Sign out of claude.ai, Renew sign-in, Auto-renew when expired
+- **Updates:** Check for updates now, Check for updates automatically, and the version you have
 - **Other:** Open Claude usage page, Open log file, Quit
 
 ### Troubleshooting
@@ -125,6 +128,7 @@ The desktop widget:
 
 - **With Claude Code:** it reads the sign-in token that Claude Code saves on your computer. It **never changes, refreshes, or copies** that file, so it can't sign you out of Claude Code. It sends that token **only to `api.anthropic.com`**.
 - **With claude.ai:** you sign in on claude.ai's real sign-in page, inside the app, and the app never sees your password. The sign-in is kept in the app's own private browser profile, separate from your normal browser, and is sent **only to `claude.ai`**. **Sign out of claude.ai** in the menu deletes it.
+- **Update check:** once a day it asks `api.github.com` for this project's latest release. That request carries no sign-in or personal data, only the app's version number. Turn it off with **⋯ → Check for updates automatically**.
 - It doesn't talk to any other server, and it has no analytics or tracking.
 - Stores its settings (window position and size, refresh interval, alert history) in `%APPDATA%\Claude Usage Meter\config.json`, and a troubleshooting log in `meter.log` in the same folder.
 

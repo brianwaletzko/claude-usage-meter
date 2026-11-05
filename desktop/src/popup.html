@@ -19,6 +19,8 @@
     --btn: #f1f1f4;
     --btn-hover: #e6e6eb;
     --time: #8b90a8;
+    --info-bg: #e8f0fe;
+    --info-fg: #1a3d7c;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -35,6 +37,8 @@
       --btn: #2d2d33;
       --btn-hover: #38383f;
       --time: #7d8299;
+      --info-bg: #1c2b45;
+      --info-fg: #b9d0f7;
     }
   }
   * { box-sizing: border-box; }
@@ -87,6 +91,7 @@
     background: var(--banner-bg); color: var(--banner-fg); border-radius: 6px;
     padding: 8px 10px; margin-bottom: 12px; font-size: 12px;
   }
+  .banner.info { background: var(--info-bg); color: var(--info-fg); }
   .banner-actions { display: flex; gap: 6px; flex-wrap: wrap; }
   .banner-actions button { margin-top: 6px; }
   footer {
@@ -114,6 +119,14 @@
       <div class="banner-actions">
         <button id="sign-in" hidden>Sign in to claude.ai</button>
         <button id="renew" hidden>Renew sign-in</button>
+      </div>
+    </div>
+
+    <div class="banner info" id="update" hidden>
+      <div id="update-text"></div>
+      <div class="banner-actions">
+        <button id="update-open">Download</button>
+        <button id="update-dismiss">Dismiss</button>
       </div>
     </div>
 

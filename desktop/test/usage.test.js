@@ -206,3 +206,25 @@ test('log file: local-time lines, and starts over when it gets too big', () => {
   assert.match(fs.readFileSync(file, 'utf8'), /WARN  check 9 failed\n$/)
   fs.rmSync(dir, { recursive: true, force: true })
 })
+
+test('update check: compares versions numerically', () => {
+  assert.equal(U.compareVersions('v0.6.0', '0.5.0'), 1)
+  assert.equal(U.compareVersions('0.10.0', '0.9.3'), 1) // not a text comparison
+  assert.equal(U.compareVersions('v0.5.0', '0.5.0'), 0)
+  assert.equal(U.compareVersions('0.4.9', '0.5.0'), -1)
+  assert.equal(U.compareVersions('v0.6.0-beta', '0.5.0'), null)
+  assert.equal(U.compareVersions('latest', '0.5.0'), null)
+})
+
+test('update check: only reports a newer, final release with a trusted link', () => {
+  const page = `${U.RELEASE_PAGE_PREFIX}tag/v0.6.0`
+  assert.deepEqual(U.newerRelease({ tag_name: 'v0.6.0', html_url: page }, '0.5.0'), { version: '0.6.0', url: page })
+  assert.equal(U.newerRelease({ tag_name: 'v0.5.0', html_url: page }, '0.5.0'), null)
+  assert.equal(U.newerRelease({ tag_name: 'v0.4.0', html_url: page }, '0.5.0'), null) // never suggest a downgrade
+  assert.equal(U.newerRelease({ tag_name: 'v0.6.0', prerelease: true, html_url: page }, '0.5.0'), null)
+  assert.equal(U.newerRelease({ tag_name: 'v0.6.0', draft: true, html_url: page }, '0.5.0'), null)
+  assert.equal(U.newerRelease(null, '0.5.0'), null)
+  // A link anywhere else is replaced with this project's releases page.
+  const r = U.newerRelease({ tag_name: 'v0.6.0', html_url: 'https://evil.example/download.exe' }, '0.5.0')
+  assert.equal(r.url, `${U.RELEASE_PAGE_PREFIX}latest`)
+})

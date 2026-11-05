@@ -202,6 +202,41 @@ function pace(win, windowMs, now = new Date()) {
   return out
 }
 
+const RELEASES_URL = 'https://api.github.com/repos/brianwaletzko/claude-usage-meter/releases/latest'
+const RELEASE_PAGE_PREFIX = 'https://github.com/brianwaletzko/claude-usage-meter/releases/'
+
+/** "v0.6.0" or "0.6.0" → [0, 6, 0]. Pre-releases ("0.6.0-beta") and anything odd → null. */
+function parseVersion(v) {
+  const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(v || '').trim())
+  return m ? m.slice(1).map(Number) : null
+}
+
+/** 1 if a is newer than b, -1 if older, 0 if the same; null if either isn't a version. */
+function compareVersions(a, b) {
+  const x = parseVersion(a)
+  const y = parseVersion(b)
+  if (!x || !y) return null
+  for (let i = 0; i < 3; i++) {
+    if (x[i] !== y[i]) return x[i] > y[i] ? 1 : -1
+  }
+  return 0
+}
+
+/**
+ * Reads GitHub's "latest release" JSON. Returns { version, url } when it's
+ * newer than `current`, else null. The link is only trusted if it points at
+ * this project's own releases page, since it gets opened in the browser.
+ */
+function newerRelease(data, current) {
+  if (!data || typeof data !== 'object' || data.draft || data.prerelease) return null
+  if (compareVersions(data.tag_name, current) !== 1) return null
+  const version = parseVersion(data.tag_name).join('.')
+  const url = typeof data.html_url === 'string' && data.html_url.startsWith(RELEASE_PAGE_PREFIX)
+    ? data.html_url
+    : `${RELEASE_PAGE_PREFIX}latest`
+  return { version, url }
+}
+
 /** Milliseconds to wait before the next poll, with backoff on errors. */
 function nextDelay(baseMs, failures, kind) {
   if (kind === 'ratelimit') return Math.max(baseMs, 10 * 60 * 1000)
@@ -224,4 +259,8 @@ module.exports = {
   pickOrg,
   WINDOW_MS,
   pace,
+  RELEASES_URL,
+  RELEASE_PAGE_PREFIX,
+  compareVersions,
+  newerRelease,
 }

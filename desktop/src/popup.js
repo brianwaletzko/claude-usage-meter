@@ -119,6 +119,8 @@ function draw() {
     $('renew').textContent = s.renewing ? 'Renewing…' : 'Renew sign-in'
   }
 
+  $('update').hidden = !s.update
+  if (s.update) $('update-text').textContent = `Version ${s.update.version} is available.`
 }
 
 window.meter.onState(s => {
@@ -130,6 +132,8 @@ $('refresh').addEventListener('click', () => window.meter.refresh())
 $('open').addEventListener('click', () => window.meter.openUsagePage())
 $('renew').addEventListener('click', () => window.meter.renew())
 $('sign-in').addEventListener('click', () => window.meter.signIn())
+$('update-open').addEventListener('click', () => window.meter.openUpdate())
+$('update-dismiss').addEventListener('click', () => window.meter.dismissUpdate())
 $('menu').addEventListener('click', () => window.meter.menu())
 $('minimize').addEventListener('click', () => window.meter.minimize())
 $('close').addEventListener('click', () => window.meter.quit())
