@@ -24,6 +24,9 @@ const RENEW_COOLDOWN_MS = 10 * 60 * 1000
 const MIN_WIDTH = 280 // the user can drag the left/right edge between these;
 const MAX_WIDTH = 640 // height always fits the content
 const MARGIN = 12
+// A dev copy's pop-ups look exactly like the installed app's, so label them.
+const TEST_COPY = Boolean(process.env.CUM_USER_DATA || process.env.CUM_USAGE_URL || process.env.CUM_RELEASES_URL)
+const popupTitle = t => (TEST_COPY ? `[Test copy] ${t}` : t)
 
 let log = createLogger(path.join(require('os').tmpdir(), 'claude-usage-meter.log')) // replaced once app paths are ready
 
@@ -232,7 +235,7 @@ function runAlerts({ quiet = false } = {}) {
     if (show) {
       const when = w.resetsAt ? ` It resets ${U.formatClock(w.resetsAt)} (${U.formatRelative(w.resetsAt)}).` : ''
       new Notification({
-        title: `Claude: ${label} at ${Math.round(w.percent)}%`,
+        title: popupTitle(`Claude: ${label} at ${Math.round(w.percent)}%`),
         body: `You've used ${Math.round(w.percent)}% of your ${label.toLowerCase()}.${when}`,
         icon: path.join(ASSETS, 'icon.png'),
       }).show()
@@ -281,7 +284,7 @@ function renewSignIn({ quiet = false } = {}) {
 
 function notify(title, body, onClick) {
   if (!Notification.isSupported()) return
-  const n = new Notification({ title, body, icon: path.join(ASSETS, 'icon.png') })
+  const n = new Notification({ title: popupTitle(title), body, icon: path.join(ASSETS, 'icon.png') })
   if (onClick) n.on('click', onClick)
   n.show()
 }

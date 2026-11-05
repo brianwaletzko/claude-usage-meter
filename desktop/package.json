@@ -1,7 +1,7 @@
 {
   "name": "claude-usage-meter",
   "productName": "Claude Usage Meter",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Always-on-top Windows desktop widget that shows your Claude 5-hour and weekly plan usage.",
   "author": "Brian Waletzko",
   "license": "MIT",
@@ -13,8 +13,8 @@
     "dist:win": "electron-builder --win --x64"
   },
   "devDependencies": {
-    "electron": "44.4.5",
-    "electron-builder": "26.16.1"
+    "electron": "44.10.2",
+    "electron-builder": "26.18.0"
   },
   "build": {
     "appId": "com.brianwaletzko.claudeusagemeter",
